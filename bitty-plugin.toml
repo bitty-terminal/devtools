@@ -1,0 +1,70 @@
+# Bitty plugin manifest.
+#
+# File name, keys, and limits are the accepted v1 contract in bitty-docs
+# `docs/specifications/plugin-platform-rfc.md` (OQ-012). The plugin manager and
+# the host parse this file independently before any plugin code runs.
+#
+# `just manifest` validates this file with `bitty-plugin-lint` from
+# bitty-plugin-sdk (R-SDK-2), the authoritative check against the accepted
+# contract, pinned by commit in package.json and bun.lock (`just install`
+# materializes it). No vendored re-implementation is used.
+
+[plugin]
+id = "bitty-featured.devtools"
+name = "Bitty DevTools"
+version = "0.1.0"
+description = "Read-only inspection and event tracing of the Bitty plugin runtime."
+license = "MIT"
+
+[compat]
+# Application and Plugin API ranges. Adjust to the host release you target;
+# both are syntax-validated here and resolved by the host at install time.
+bitty = ">=0.5,<1.0"
+plugin-api = "^1.0"
+
+[capabilities]
+# Deny by default: omit this table entirely when the plugin needs no authority.
+# Request capabilities one by one; unknown identifiers fail validation and
+# there is no allow-all identifier.
+#
+# - `debug.inspect`: read-only `bitty.debug.inspect` (plugin lifecycle rows,
+#   command and event registrations, and this plugin's own grants).
+# - `debug.trace`: bounded `bitty.debug.trace` / `trace_get` event traces.
+# - `platform.notify`: show the bounded text summaries.
+#
+# `debug.control` (high-risk runtime control) and every `ui.*` identifier are
+# intentionally absent: this plugin never mutates runtime state, and UI
+# surfaces are deferred until bitty-terminal/bitty#1442 closes.
+debug.inspect = true
+debug.trace = true
+platform.notify = true
+
+[lazy]
+# Static triggers let the host register the plugin without creating a VM.
+# Commands are plugin-qualified: `<plugin-id>:<resource>`.
+commands = [
+  "bitty-featured.devtools:plugins",
+  "bitty-featured.devtools:commands",
+  "bitty-featured.devtools:events",
+  "bitty-featured.devtools:grants",
+  "bitty-featured.devtools:trace-start",
+  "bitty-featured.devtools:trace-stop",
+  "bitty-featured.devtools:trace-dump",
+]
+# A `bitty.debug.trace` trace records ONLY the event kinds declared here (the
+# same least-privilege precondition `bitty.events.subscribe` enforces), and
+# only while this plugin is Active. These are the v1 observation kinds from
+# the closed event set; lifecycle and interception kinds are not traced.
+# The plugin subscribes to none of them: declaring a kind is what makes it
+# visible to a trace.
+events = [
+  "terminal.opened",
+  "terminal.closed",
+  "terminal.title-changed",
+  "terminal.cwd-changed",
+  "terminal.bell",
+  "focus.changed",
+  "selection.changed",
+  "process.exited",
+  "config.reloaded",
+]

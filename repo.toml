@@ -1,0 +1,14 @@
+# devtools: workspace identity descriptor (kind/lang/role mirror workspace.toml).
+[repo]
+name = "devtools"
+kind = "plugin"
+lang = "lua/ts"
+role = "independent plugin: read-only runtime inspection and event tracing"
+owner = "bitty-plugins"
+# In-repo refs cite bitty-docs only; revisit after the OQ-053 docs split lands.
+docs = "bitty-docs"
+
+[contracts.consumes]
+manifest-v1 = "OQ-012 plugin-platform-rfc" # bitty-plugin.toml header
+plugin-api-v1 = "ADR-0009 Lua Surface" # capabilities must match manifest
+debug-api = "bitty#1573 bitty.debug read-only backend" # inspect/trace/trace_get
