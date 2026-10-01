@@ -17,12 +17,11 @@ Priority: P0/P1/P2 | Area: plugins | Labels: feat | Milestone: v0.1.0 | RFC: OQ-
 
 ## Quality gates
 
-- [ ] `just check` passes (lint + fmt-check + manifest + lua + test)
+- [ ] `just check` passes (lint + fmt-check + manifest + lua + lua-control + test)
 - [ ] `just fmt-check` passes (Prettier 3.9.6)
 - [ ] `just lint` passes (markdownlint-cli2 0.23.2)
-- [ ] `just install` ran (`bun install --frozen-lockfile`) so the commit-pinned SDK linter is present
 - [ ] `just manifest` passes (authoritative SDK `bitty-plugin-lint`, R-SDK-2)
-- [ ] `just lua` passes (luaparse 0.3.1)
+- [ ] `just lua` passes (`luac5.4 -p`) and `just lua-control` confirms it rejects invalid Lua
 - [ ] `just test` passes (lua5.4 behavior suite; LuaLS wrapper green or documented skip)
 - [ ] `actionlint` passes (actionlint 1.7.12)
 

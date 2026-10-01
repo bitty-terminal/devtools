@@ -1,15 +1,15 @@
 # Devtools test harness
 
 Headless checks for the `lua/devtools/**` implementation. `just check`
-(`lint` + `fmt-check` + `manifest` + `lua` + `test`) runs them locally and in
+(`lint` + `fmt-check` + `manifest` + `lua` + `lua-control` + `test`) runs them locally and in
 CI; the individual suites are also available directly.
 
 ## Prerequisites
 
 - `lua5.4` (plugin VM baseline per ADR 0005) — required for behavior tests;
   CI installs it from the Ubuntu archive before `just check`.
-- `bun` — runs the LuaLS wrapper script and `just install`, which materializes
-  the pinned devDependencies (including the SDK linter used by `just manifest`).
+- `luac5.4` — Lua 5.4 syntax gate (`just lua`) and its fail-closed control
+  (`just lua-control`).
 - `lua-language-server` (optional) — LuaLS conformance; the check skips with
   exit 0 when it is unavailable (CI does not install it).
 
@@ -39,7 +39,7 @@ just test-luals
 | `lua-defs/bitty.d.lua`          | Unmodified SDK LuaLS definitions (bitty-plugin-sdk `e1723b6`, sha256 `9aef9397...`).                      |
 | `lua-defs/bitty-debug.d.lua`    | Local `bitty.debug` definitions mirroring bitty `c4af172b`; `control` deliberately undefined.             |
 | `lua-defs/negative-fixture.lua` | Excluded-surface fixture that LuaLS must reject.                                                          |
-| `check-lua-luals.mjs`           | Positive/negative LuaLS workspace check.                                                                  |
+| `check-luals.sh`                | POSIX shell positive/negative LuaLS workspace check.                                                      |
 
 ## Known gaps
 

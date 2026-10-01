@@ -41,3 +41,18 @@ is deferred until bitty#1442 closes.
   CONTRIBUTING, SECURITY, LICENSE (MIT), commitlint, lefthook, Markdown lint,
   CI, CodeQL, snapshot-source workflows, Dependabot, issue/PR templates,
   CarryCtx baseline config, and snapshot publish/restore scripts.
+
+### Changed
+
+- The repository is Lua-only: `package.json`, `bun.lock`, commitlint,
+  lefthook, and the JavaScript LuaLS wrapper are removed, along with the
+  `just install`, `commit-check`, and `hooks-*` recipes, the Dependabot `bun`
+  entry, and the CodeQL `javascript-typescript` analysis (#6).
+- Gate tool versions are pinned once as justfile variables and run through
+  `bunx --bun`: markdownlint-cli2 0.23.2, Prettier 3.9.6, and the SDK
+  `bitty-plugin-lint` at `bitty-plugin-sdk` commit `e1723b6`. CI reads the Bun
+  version from `.bun-version`.
+- The Lua syntax gate uses `luac5.4 -p` (the host VM implements a Lua 5.4
+  subset) instead of the Lua 5.1 `luaparse` grammar, plus a `lua-control`
+  recipe that confirms invalid Lua is rejected. LuaLS conformance runs as the
+  POSIX shell script `tests/check-luals.sh`.

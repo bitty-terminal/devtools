@@ -18,25 +18,27 @@ released Bitty host.
 
 ## Prerequisites
 
-Toolchain expectations (dependency versions are pinned in
-[package.json](package.json) and locked in `bun.lock`; never invoke formatters
-or linters by name):
+This is a Lua-only plugin repository: the host loads `bitty-plugin.toml` and
+`lua/`, and there is no JS/TS project. Gate tool versions are pinned once, as
+variables in the [justfile](justfile); never invoke formatters or linters by
+name.
 
 - `just` — command runner owning all quality-gate invocations.
-- `bun` / `bun run <bin>` — JavaScript execution and package management; the
-  justfile invokes installed tools as `bun run <bin>`. Never use `npm`, `npx`,
-  or `yarn` in any Bitty repository.
-- `markdownlint-cli2`, `prettier`, `commitlint`, `lefthook` — materialized by
-  `just install` and invoked through the justfile.
+- `bun` — runs the pinned `markdownlint-cli2`, `prettier`, and SDK
+  `bitty-plugin-lint` gates through `bunx --bun`. The Bun version is pinned in
+  `.bun-version`. Never use `npm`, `npx`, or `yarn` in any Bitty repository.
+- `lua5.4` and `luac5.4` — behavior suite and Lua 5.4 syntax gate.
+- `lua-language-server` (optional) — LuaLS conformance; skipped when absent.
+- Commit-message linting and Git hooks are not provided; local hook tooling
+  is each developer's own choice.
 
 ## Development setup
 
 1. Enter this repository before running Git, CarryCtx, or toolchain commands.
-2. Install pinned development dependencies: `just install`.
-3. Enable Git hooks (optional): `just hooks-install`.
-4. Run all quality gates: `just check` (Markdown lint, Prettier format check,
-   manifest validation, Lua parse, and the Lua behavior suite). CI runs the same aggregate target.
-5. Record scoped work in CarryCtx (task, session, progress, checkpoint) and
+2. Run all quality gates: `just check` (Markdown lint, Prettier format check,
+   manifest validation, Lua 5.4 parse plus its fail-closed control, and the
+   Lua behavior and LuaLS suites). CI runs the same aggregate target.
+3. Record scoped work in CarryCtx (task, session, progress, checkpoint) and
    stop at review; independent review is required for acceptance.
 
 ## Delivery lifecycle

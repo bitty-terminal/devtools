@@ -77,15 +77,18 @@ Task: CTX-XXXX` and PRs add `Closes #<issue>`.
 
 ## Toolchain policy
 
-- JavaScript runs on `bun` (pinned in `package.json` `packageManager` and the
-  CI workflow).
+- Lua-only repository: the host loads `bitty-plugin.toml` and `lua/`. Do not
+  reintroduce a JS/TS project (`package.json`, lockfiles, `node_modules`,
+  JS/TS scripts or configs).
 - Never invoke formatters or linters directly by name. Run quality gates only
   via the justfile: `just check` plus `just lint`, `just fmt-check`,
-  `just manifest`, `just lua`, `just test`.
-- Dependency versions are pinned in `package.json` and locked in `bun.lock`;
-  the justfile keeps no version pins and invokes installed tools as
-  `bun run <bin>`. Do not bump pins as a side effect of an unrelated task;
-  report drift instead of silently fixing it.
+  `just manifest`, `just lua`, `just lua-control`, `just test`.
+- Gate tool versions (prettier, markdownlint-cli2, SDK commit `sdk_ref`) are
+  pinned once as justfile variables and run through `bunx --bun`; the Bun
+  version is pinned once in `.bun-version` (read by CI). Do not bump pins as a
+  side effect of an unrelated task; report drift instead of silently fixing it.
+- The Lua syntax gate uses `luac5.4 -p`: the host VM (phodopus via
+  `bitty-lua`) implements a Lua 5.4 language subset.
 - `tests/lua-defs/bitty.d.lua` is the unmodified SDK file at the pinned
   commit; `tests/lua-defs/bitty-debug.d.lua` is a local stand-in for the
   `bitty.debug` surface until the SDK generates it.
