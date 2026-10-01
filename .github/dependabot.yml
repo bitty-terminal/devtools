@@ -8,7 +8,7 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "chore"
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
