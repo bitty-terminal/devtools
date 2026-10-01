@@ -6,8 +6,8 @@
 #
 # `just manifest` validates this file with `bitty-plugin-lint` from
 # bitty-plugin-sdk (R-SDK-2), the authoritative check against the accepted
-# contract, pinned by commit in package.json and bun.lock (`just install`
-# materializes it). No vendored re-implementation is used.
+# contract, pinned by commit in the justfile `sdk_ref` variable and run through
+# `bunx --bun`. No vendored re-implementation is used.
 
 [plugin]
 id = "bitty-featured.devtools"

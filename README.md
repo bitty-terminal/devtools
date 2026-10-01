@@ -116,11 +116,13 @@ visible to a trace.
 ## Development
 
 ```sh
-just install   # bun install --frozen-lockfile; the only network step
-just check     # lint + fmt-check + manifest + lua + test
+just check     # lint + fmt-check + manifest + lua + lua-control + test
 ```
 
-`just test-lua` needs `lua5.4`. `just test-luals` needs `lua-language-server`
+This is a Lua-only repository with no JS/TS project. `just check` needs
+`just`, `bun` (runs the pinned Markdown and SDK manifest linters through
+`bunx`), `lua5.4`, and `luac5.4`; the Markdown and manifest gates fetch their
+pinned tools on first run. `just test-lua` needs `lua5.4`. `just test-luals` needs `lua-language-server`
 and skips with exit 0 when it is absent. Contribution rules are in
 [CONTRIBUTING.md](CONTRIBUTING.md). The security policy is in
 [SECURITY.md](SECURITY.md).

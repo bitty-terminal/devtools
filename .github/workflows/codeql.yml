@@ -25,7 +25,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [actions, javascript-typescript]
+        # Only workflow code is analyzable: the plugin is Lua, which CodeQL
+        # does not support, and the repository carries no JS/TS sources.
+        language: [actions]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -2,7 +2,7 @@
 [repo]
 name = "devtools"
 kind = "plugin"
-lang = "lua/ts"
+lang = "lua"
 role = "independent plugin: read-only runtime inspection and event tracing"
 owner = "bitty-plugins"
 # In-repo refs cite bitty-docs only; revisit after the OQ-053 docs split lands.
