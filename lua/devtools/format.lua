@@ -1,10 +1,17 @@
 -- Pure text formatting for Bitty DevTools (bitty-featured.devtools).
 --
 -- No host access: every function takes plain tables returned by
--- `bitty.debug.*` (or a caught error) and returns bounded strings suitable for
--- a host-rendered notification. All output is capped by the named limits
--- below so a large runtime (up to the host's 1024 inspect items or 10000
--- trace records) never produces an unbounded notification body.
+-- `bitty.debug.*` (or a caught error) and returns bounded strings. Two
+-- shapes are produced:
+--
+-- - the full multi-line text (`inspect`, `trace`, `error`), bounded by the
+--   byte limits below and returned as the command result;
+-- - a one-line notice (`notice`) derived from it, bounded by
+--   NOTIFY_MAX_CHARS characters, which is the only text passed to
+--   `bitty.notify.show`.
+--
+-- A large runtime (up to the host's 1024 inspect items or 10000 trace
+-- records) therefore never produces an unbounded body.
 
 local M = {}
 
@@ -22,6 +29,13 @@ M.MAX_BODY_BYTES = 2048
 M.MAX_PAYLOAD_FIELDS = 4
 -- Maximum bytes of an error notification body.
 M.MAX_ERROR_BYTES = 320
+-- Maximum characters (Unicode scalar values, not bytes) of a notification
+-- body. Mirrors bitty `bitty-ui/src/window_chrome.rs`
+-- `MAX_NOTIFICATION_TEXT_LEN` (256): the host REJECTS a longer body with
+-- `ChromeError::TextTooLong` instead of truncating it.
+M.NOTIFY_MAX_CHARS = 256
+-- Separator replacing line breaks in a one-line notice.
+M.NOTICE_SEPARATOR = "; "
 -- Marker appended to text cut by a bound.
 M.ELLIPSIS = "..."
 
@@ -179,10 +193,11 @@ local function sorted_keys(payload)
 end
 
 -- Compact `k=v` summary of a trace payload: scalar fields only, at most
--- MAX_PAYLOAD_FIELDS pairs. Nested tables render as `{...}`.
+-- MAX_PAYLOAD_FIELDS pairs. Nested tables render as `{...}`; a non-table
+-- payload renders as a type marker such as `<string>`.
 function M.payload(payload)
   if type(payload) ~= "table" then
-    return ""
+    return "<" .. type(payload) .. ">"
   end
   if payload.truncated == true then
     return string.format("payload truncated (%s bytes)", M.field(payload.bytes))
@@ -280,8 +295,8 @@ local ERROR_HINTS = {
   E_TIMEOUT = "host call timed out",
 }
 
--- Notification body for a failed action: `<code>: <hint or message>`.
-function M.error(action, err)
+-- `<code>: <hint (message)>` for a caught error, unbounded by itself.
+local function error_detail(err)
   local info = M.error_info(err)
   local detail = ERROR_HINTS[info.code]
   if info.message ~= "" then
@@ -291,11 +306,48 @@ function M.error(action, err)
       detail = info.message
     end
   end
-  local body = M.field(action) .. " failed: " .. M.field(info.code)
+  local text = M.field(info.code)
   if detail ~= nil then
-    body = body .. ": " .. detail
+    text = text .. ": " .. detail
   end
-  return sanitize(M.truncate(body, M.MAX_ERROR_BYTES))
+  return text
+end
+
+-- Bounded, sanitized `<code>: <hint>` detail for a caught error.
+function M.error_detail(err)
+  return sanitize(M.truncate(error_detail(err), M.MAX_ERROR_BYTES))
+end
+
+-- Text for a failed action: `<action> failed: <code>: <hint>`.
+function M.error(action, err)
+  return sanitize(M.truncate(M.field(action) .. " failed: " .. error_detail(err), M.MAX_ERROR_BYTES))
+end
+
+-- Cut `text` to at most `limit` characters, appending ELLIPSIS when cut.
+-- Valid UTF-8 is cut on a character boundary. Invalid UTF-8 is cut by bytes:
+-- the host decodes each invalid byte to at most one replacement character,
+-- so `limit` bytes can never exceed `limit` characters.
+local function truncate_chars(text, limit)
+  local ok, length = pcall(utf8.len, text)
+  if not ok or length == nil then
+    return M.truncate(text, limit)
+  end
+  if length <= limit then
+    return text
+  end
+  local cut = utf8.offset(text, limit - #M.ELLIPSIS + 1)
+  return string.sub(text, 1, cut - 1) .. M.ELLIPSIS
+end
+
+-- One-line notification body derived from full command text: line breaks
+-- become NOTICE_SEPARATOR, control bytes are replaced, and the result is at
+-- most NOTIFY_MAX_CHARS characters.
+function M.notice(text)
+  if type(text) ~= "string" then
+    text = tostring(text)
+  end
+  local one_line = (string.gsub(text, "\n", M.NOTICE_SEPARATOR))
+  return truncate_chars(sanitize(one_line), M.NOTIFY_MAX_CHARS)
 end
 
 return M

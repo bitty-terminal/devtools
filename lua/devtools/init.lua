@@ -14,6 +14,10 @@
 -- a failure is surfaced as a concise notification carrying the host error
 -- code and never escapes a command handler.
 --
+-- `args_schema` / `result_schema` document the intended contract only: the
+-- current host bridge keeps `id`, `title`, `description`, and `run` and does
+-- not enforce them, so `trace-start` validates its `filter` argument itself.
+--
 -- Pure formatting lives in `devtools.format`; the single-handle trace state
 -- machine lives in `devtools.trace`.
 
@@ -28,16 +32,18 @@ local TRACE_FILTER_MAX_BYTES = 128
 
 local session = trace.new(bitty.debug)
 
--- Show a notification; a notify failure (rate policy, revoked grant) is
--- swallowed so it can never turn a successful command into a crash. The
--- rendered text is also returned as the command result.
-local function show(title, body, urgency)
+-- Show a one-line notice derived from `text` (at most
+-- format.NOTIFY_MAX_CHARS characters, the host chrome limit) and return the
+-- full bounded `text` as the command result. A notify failure (rate policy,
+-- revoked grant) is swallowed so it can never turn a successful command into
+-- a crash.
+local function show(title, text, urgency)
   pcall(bitty.notify.show, {
     title = title,
-    body = body,
+    body = format.notice(text),
     urgency = urgency or "low",
   })
-  return body
+  return text
 end
 
 local function show_error(action, err)
@@ -150,14 +156,17 @@ bitty.commands.register({
   result_schema = RESULT_SCHEMA,
   run = function(_args)
     local filter = session.filter
-    local ok, result = session:stop()
+    local ok, outcome = session:stop()
     if not ok then
-      return show_error("trace stop", result)
+      return show_error("trace stop", outcome)
     end
-    if result == nil then
+    if outcome.kind == trace.STOP_GONE then
       return show(NOTIFY_TITLE, "trace stopped (the host had already dropped it)")
     end
-    local title, body = format.trace(result, filter)
+    if outcome.kind == trace.STOP_DRAIN_FAILED then
+      return show(NOTIFY_TITLE, "trace stopped; final drain failed: " .. format.error_detail(outcome.err), "normal")
+    end
+    local title, body = format.trace(outcome.result, filter)
     return show(title, "trace stopped; " .. body)
   end,
 })

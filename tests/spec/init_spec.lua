@@ -2,6 +2,7 @@
 -- `bitty` host stub.
 
 local MockHost = require("support.mock_host")
+local format = require("devtools.format")
 
 local M = {}
 
@@ -116,7 +117,8 @@ function M.run(context)
   tap.contains(plugins, "bitty-featured.activity 0.0.1 [suspended] gen 3", "plugins row")
   local note = host:last_notification()
   tap.equal(note.title, "DevTools: plugins", "plugins notification title")
-  tap.equal(note.body, plugins, "notification body equals the command result")
+  tap.equal(note.body, format.notice(plugins), "notification body is the one-line notice of the result")
+  tap.not_contains(note.body, "\n", "notification body is a single line")
   tap.equal(note.urgency, "low", "summaries use low urgency")
 
   tap.contains(host:run("commands"), PLUGIN_ID .. ":plugins - DevTools: list plugins", "commands row")
@@ -232,9 +234,59 @@ function M.run(context)
     "stop after the host dropped the trace"
   )
 
+  -- final drain error on trace-stop is surfaced, not reported as dropped
+  for _, code in ipairs({ "E_TIMEOUT", "E_CAPABILITY_DENIED" }) do
+    local failing = new_host()
+    load_plugin(failing)
+    failing:run("trace-start")
+    failing:deliver("terminal.bell", {})
+    failing.trace_get_error = { class = "runtime", code = code, message = "drain" }
+    local text = failing:run("trace-stop")
+    tap.contains(text, "trace stopped; final drain failed: " .. code, code .. " drain error surfaced")
+    tap.not_contains(text, "already dropped", code .. " drain error is not reported as dropped")
+    tap.equal(failing:open_trace_count(), 0, code .. " trace is closed despite the drain error")
+    tap.equal(failing:last_notification().urgency, "normal", code .. " drain error uses normal urgency")
+  end
+
+  -- every notification body fits the host chrome limit for large inputs
+  local big_view = { plugins = {}, commands = {}, events = {} }
+  for index = 1, MockHost.MAX_INSPECT_ITEMS + 10 do
+    local wide = string.rep("\u{e9}", 200) .. index
+    big_view.plugins[index] = { id = wide, version = wide, state = "active", generation = index }
+    big_view.commands[index] = { plugin = wide, id = wide, title = wide }
+    big_view.events[index] = { plugin = wide, kind = wide }
+  end
+  local big = new_host({ view = big_view })
+  load_plugin(big)
+  for _, id in ipairs({ "plugins", "commands", "events", "grants" }) do
+    big:run(id)
+  end
+  big:run("trace-start", { filter = string.rep("t", 128) })
+  big:run("trace-stop")
+  big:run("trace-start")
+  for index = 1, 2000 do
+    big:deliver("terminal.title-changed", { title = string.rep("\u{4e16}", 300), terminal_id = index }, 1)
+  end
+  local big_dump = big:run("trace-dump")
+  tap.contains(big_dump, "1000 records, 1000 dropped", "large drain is rendered")
+  big:deliver("terminal.bell", {})
+  big:run("trace-stop")
+  big:run("trace-dump")
+  big.trace_get_error = nil
+  for _ = 1, MockHost.MAX_TRACES_PER_PLUGIN do
+    big.bitty.debug.trace(nil)
+  end
+  big:run("trace-start")
+  tap.equal(big.rejected_notifications or 0, 0, "the host never rejects a notification body")
+  tap.ok(#big.notifications >= 9, "large-input commands all notified")
+  for _, sent in ipairs(big.notifications) do
+    tap.le(utf8.len(sent.body), format.NOTIFY_MAX_CHARS, "notification body <= 256 characters")
+    tap.not_contains(sent.body, "\n", "notification body is one line")
+  end
+
   -- the plugin never reaches outside commands/notify/debug, and never calls
   -- debug.control
-  for _, probe in ipairs({ host, denied, tracer, filtering, overflow, dropped }) do
+  for _, probe in ipairs({ host, denied, tracer, filtering, overflow, dropped, big }) do
     tap.equal(#probe.ui_accesses, 0, "no ui or other namespace access")
     for _, call in ipairs(probe.calls) do
       tap.ok(call ~= "debug.control", "debug.control is never called")

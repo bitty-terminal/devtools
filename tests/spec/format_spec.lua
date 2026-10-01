@@ -89,7 +89,8 @@ function M.run(context)
   )
   tap.equal(format.payload({ a = 1, b = 2, c = 3, d = 4, e = 5, f = 6 }), "a=1 b=2 c=3 d=4 +2", "payload fields bounded")
   tap.equal(format.payload({ nested = { x = 1 } }), "nested={...}", "nested tables collapse")
-  tap.equal(format.payload(nil), "", "non-table payload renders empty")
+  tap.equal(format.payload(nil), "<nil>", "nil payload renders a type marker")
+  tap.equal(format.payload("raw"), "<string>", "string payload renders a type marker")
 
   -- trace
   local _, trace_body = format.trace({
@@ -123,6 +124,27 @@ function M.run(context)
   local _, bad_trace = format.trace({ dropped = 1 })
   tap.contains(bad_trace, "unexpected", "malformed trace result is reported, not raised")
 
+  -- notice: one line, <= NOTIFY_MAX_CHARS characters
+  tap.equal(format.NOTIFY_MAX_CHARS, 256, "notice limit mirrors MAX_NOTIFICATION_TEXT_LEN")
+  tap.equal(format.notice("a\nb"), "a; b", "line breaks become separators")
+  tap.equal(format.notice("short"), "short", "short text is unchanged")
+  local ascii_notice = format.notice(string.rep("x", 5000))
+  tap.equal(#ascii_notice, format.NOTIFY_MAX_CHARS, "ASCII notice is cut to the limit")
+  tap.equal(string.sub(ascii_notice, -3), format.ELLIPSIS, "cut notice ends with the ellipsis")
+  local wide_notice = format.notice(string.rep("\u{4e16}", 1000))
+  tap.equal(utf8.len(wide_notice), format.NOTIFY_MAX_CHARS, "multibyte notice is cut by characters")
+  tap.ok(#wide_notice > format.NOTIFY_MAX_CHARS, "multibyte notice limit counts characters, not bytes")
+  local exact = string.rep("\u{e9}", format.NOTIFY_MAX_CHARS)
+  tap.equal(format.notice(exact), exact, "exactly 256 characters is kept")
+  local invalid_notice = format.notice(string.rep("\xff", 1000))
+  tap.le(#invalid_notice, format.NOTIFY_MAX_CHARS, "invalid UTF-8 notice is bounded by bytes")
+  tap.not_contains(format.notice("a\27[31mb"), "\27", "notice carries no control bytes")
+  local _, huge_trace = format.trace({ records = records, dropped = 9 })
+  tap.le(utf8.len(format.notice(huge_trace)), format.NOTIFY_MAX_CHARS, "trace notice is bounded")
+  tap.le(utf8.len(format.notice(many_body)), format.NOTIFY_MAX_CHARS, "inspect notice is bounded")
+  tap.le(utf8.len(format.notice(format.error("x", { code = "E_X", message = string.rep("m", 900) }))),
+    format.NOTIFY_MAX_CHARS, "error notice is bounded")
+
   -- errors
   local info = format.error_info({ class = "runtime", code = "E_CAPABILITY_DENIED", message = "nope" })
   tap.equal(info.code, "E_CAPABILITY_DENIED", "error code extracted")
@@ -135,6 +157,9 @@ function M.run(context)
   local long_error = format.error("x", { code = "E_X", message = string.rep("m\n", 1000) })
   tap.le(#long_error, format.MAX_ERROR_BYTES, "error body is bounded")
   tap.not_contains(long_error, "\n", "error body carries no control bytes")
+  tap.equal(format.error_detail({ code = "E_TIMEOUT" }), "E_TIMEOUT: host call timed out", "error detail")
+  tap.le(#format.error_detail({ code = "E_X", message = string.rep("q", 900) }), format.MAX_ERROR_BYTES,
+    "error detail is bounded")
 end
 
 return M

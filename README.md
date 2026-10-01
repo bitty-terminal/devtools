@@ -5,17 +5,25 @@ Read-only inspection and event tracing of the Bitty plugin runtime
 (plugins, commands, event subscriptions, its own grants) and records bounded
 event traces, and shows the results as host-rendered text notifications.
 
-> Status: pre-release. The plugin targets the read-only `bitty.debug` backend
-> on bitty `main` (bitty#1573). It has been verified against the local mock
-> host and LuaLS definitions only, not yet against a released host. UI
-> surfaces (panels, overlays, mounted views) are deferred until
+> Status: pre-release, not usable on a real host yet. The plugin targets the
+> read-only `bitty.debug` backend on bitty `main` (`c4af172b`, bitty#1573).
+> On that revision `PluginRuntime::deliver_event`, `dispatch_command`, and
+> `drain_notifications` have no production caller. Live tracing, command
+> dispatch, and notification delivery depend on
+> [bitty#1564](https://github.com/bitty-terminal/bitty/pull/1564)
+> (`CTX-0892`, wire the plugin runtime into the app loop). Until that lands,
+> traces record nothing on a real host and the commands are reachable only
+> through runtime test seams. The plugin is verified against the local mock
+> host and LuaLS definitions only. UI surfaces (panels, overlays, mounted
+> views) are deferred until
 > [bitty#1442](https://github.com/bitty-terminal/bitty/issues/1442) closes and
 > the upstream GUI APIs are finished.
 
 ## Commands
 
 All commands are plugin-qualified as `bitty-featured.devtools:<name>`. Every
-command returns the rendered text and also shows it as a notification.
+command returns its full rendered text as the command result and shows a
+one-line notice of it, at most 256 characters, as a notification.
 
 | Command       | Behavior                                                                                                                                                   |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -25,7 +33,7 @@ command returns the rendered text and also shows it as a notification.
 | `grants`      | List the capabilities granted to this plugin (the host never exposes other plugins' grants).                                                               |
 | `trace-start` | Open one trace over the declared event kinds. Optional argument `filter` (exact kind, or a prefix ending in `*`, such as `terminal.*`; at most 128 bytes). |
 | `trace-dump`  | Drain the buffered records and summarize the most recent ones, with the drained and dropped counts.                                                        |
-| `trace-stop`  | Drain the final records and close the trace.                                                                                                               |
+| `trace-stop`  | Drain the final records and close the trace. If the final drain fails, the trace is still closed and the drain error is reported.                          |
 
 The plugin holds at most one trace at a time; `trace-start` while a trace is
 running reports `E_TRACE_ACTIVE`. If the host drops the trace (reload,
@@ -33,9 +41,17 @@ failure, or disposal), the next dump reports `E_TRACE_GONE` and a new trace
 can be started. The `panels` inspect target is reserved upstream
 (`E_NOT_IMPLEMENTED`) and is not exposed.
 
-Output is bounded: at most 15 rows per notification, fields capped at 64
-bytes, lines at 112 bytes, and bodies at 2048 bytes. Control bytes in
-host-supplied strings are replaced with `?`.
+Output is bounded. The command result holds at most 15 rows, with fields
+capped at 64 bytes, lines at 112 bytes, and the whole text at 2048 bytes.
+The notification body is a single line of at most 256 characters, because
+the host chrome rejects longer bodies (`MAX_NOTIFICATION_TEXT_LEN`) instead
+of truncating them. Control bytes in host-supplied strings are replaced with
+`?`.
+
+Each command definition carries `args_schema` and `result_schema` as
+documentation of the intended contract. The current host bridge keeps only
+`id`, `title`, `description`, and `run` and does not enforce them, so the
+plugin validates the `filter` argument itself.
 
 ## Error handling
 

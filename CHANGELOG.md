@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Not usable on a real host yet. On bitty `main` `c4af172b`,
+`PluginRuntime::deliver_event`, `dispatch_command`, and `drain_notifications`
+have no production caller. Live tracing, command dispatch, and notification
+delivery depend on bitty#1564 (`CTX-0892`). Until it lands, traces record
+nothing and the commands are reachable only through runtime test seams. UI
+is deferred until bitty#1442 closes.
+
 ### Added
 
 - Read-only runtime inspection commands `plugins`, `commands`, `events`, and
@@ -14,10 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notifications.
 - Event tracing commands `trace-start` (optional `filter`), `trace-dump`, and
   `trace-stop` over `bitty.debug.trace` / `trace_get`, using a single-handle
-  state machine that recovers when the host drops a trace.
+  state machine that recovers when the host drops a trace. `trace-stop`
+  tells apart a successful final drain, a trace the host already dropped,
+  and a failed final drain.
+- Notifications carry a one-line notice of at most 256 characters (the host
+  chrome `MAX_NOTIFICATION_TEXT_LEN`). The full bounded text is the command
+  result.
 - Manifest requesting only `debug.inspect`, `debug.trace`, and
   `platform.notify`, with the nine v1 observation event kinds declared so
-  traces have something to record.
+  traces have something to record. `compat.bitty = ">=0.0.21,<1.0"` admits
+  the current pre-1.0 host.
 - Pure formatting module with named output bounds and control-byte
   sanitization. Host errors are surfaced as `<action> failed: <code>`
   notifications and never raised.
@@ -28,7 +41,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CONTRIBUTING, SECURITY, LICENSE (MIT), commitlint, lefthook, Markdown lint,
   CI, CodeQL, snapshot-source workflows, Dependabot, issue/PR templates,
   CarryCtx baseline config, and snapshot publish/restore scripts.
-
-### Removed
-
-- Template `hello` command and `greeter` service.

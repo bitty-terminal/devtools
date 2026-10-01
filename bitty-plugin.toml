@@ -19,7 +19,7 @@ license = "MIT"
 [compat]
 # Application and Plugin API ranges. Adjust to the host release you target;
 # both are syntax-validated here and resolved by the host at install time.
-bitty = ">=0.5,<1.0"
+bitty = ">=0.0.21,<1.0"
 plugin-api = "^1.0"
 
 [capabilities]

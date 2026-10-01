@@ -88,11 +88,22 @@ function Session:dump()
   return true, result
 end
 
--- Drain the final records, then close the trace. Returns `true, result`
--- (result may be nil when the final drain found the trace already gone) or
--- `false, err`. The machine returns to idle whenever the host no longer
--- holds the handle (successful close, unknown-handle E_DEF_INVALID, or a
--- nil drain); other close failures keep the handle so stop can be retried.
+-- Outcomes of a successful stop(), distinguishing what the final drain saw.
+M.STOP_DRAINED = "drained" -- final drain returned records; trace closed
+M.STOP_GONE = "gone" -- final drain returned nil; host had already dropped it
+M.STOP_DRAIN_FAILED = "drain_failed" -- final drain raised; trace still closed
+
+-- Drain the final records, then close the trace.
+--
+-- Returns `true, outcome` or `false, err`, where outcome is one of:
+--   { kind = STOP_DRAINED, result = { records, dropped } }
+--   { kind = STOP_GONE }
+--   { kind = STOP_DRAIN_FAILED, err = <drain error> }
+-- A drain error does not prevent closing: the trace is still closed and the
+-- drain error is reported in the outcome. The machine returns to idle
+-- whenever the host no longer holds the handle (successful close,
+-- unknown-handle E_DEF_INVALID on close, or a nil drain); other close
+-- failures keep the handle so stop can be retried.
 function Session:stop()
   if self.handle == nil then
     return false, local_error(M.E_TRACE_INACTIVE, "no trace is running")
@@ -101,21 +112,17 @@ function Session:stop()
   local drained_ok, drained = pcall(self.debug.trace_get, handle)
   if drained_ok and drained == nil then
     self:reset()
-    return true, nil
+    return true, { kind = M.STOP_GONE }
   end
   local ok, err = pcall(self.debug.trace, { enabled = false, handle = handle })
-  if not ok then
-    if type(err) == "table" and err.code == "E_DEF_INVALID" then
-      self:reset()
-      return true, drained_ok and drained or nil
-    end
+  if not ok and not (type(err) == "table" and err.code == "E_DEF_INVALID") then
     return false, err
   end
   self:reset()
   if drained_ok then
-    return true, drained
+    return true, { kind = M.STOP_DRAINED, result = drained }
   end
-  return true, nil
+  return true, { kind = M.STOP_DRAIN_FAILED, err = drained }
 end
 
 return M

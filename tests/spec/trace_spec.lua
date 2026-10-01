@@ -40,7 +40,8 @@ function M.run(context)
   host:deliver("terminal.bell", {})
   local stopped, final = session:stop()
   tap.ok(stopped, "stop succeeds")
-  tap.equal(#final.records, 1, "stop returns the final drained records")
+  tap.equal(final.kind, trace.STOP_DRAINED, "stop reports a successful final drain")
+  tap.equal(#final.result.records, 1, "stop returns the final drained records")
   tap.equal(session:active(), false, "session is idle after stop")
   tap.equal(host:open_trace_count(), 0, "stop closes the host trace")
 
@@ -115,8 +116,42 @@ function M.run(context)
   gone_stop_host:drop_traces()
   local gs_ok, gs_result = gone_stop:stop()
   tap.ok(gs_ok, "stop of a dropped trace succeeds")
-  tap.equal(gs_result, nil, "stop of a dropped trace returns no records")
+  tap.equal(gs_result.kind, trace.STOP_GONE, "stop of a dropped trace reports STOP_GONE")
+  tap.equal(gs_result.result, nil, "stop of a dropped trace returns no records")
   tap.equal(gone_stop:active(), false, "stop of a dropped trace resets to idle")
+
+  -- final drain raises, close still succeeds: report the drain error
+  for _, code in ipairs({ "E_TIMEOUT", "E_CAPABILITY_DENIED" }) do
+    local drain_host = new_host()
+    local draining = trace.new(drain_host.bitty.debug)
+    draining:start(nil)
+    drain_host:deliver("terminal.bell", {})
+    drain_host.trace_get_error = { class = "runtime", code = code, message = "drain " .. code }
+    local d_ok, d_outcome = draining:stop()
+    tap.ok(d_ok, code .. " drain: stop still succeeds")
+    tap.equal(d_outcome.kind, trace.STOP_DRAIN_FAILED, code .. " drain: outcome is STOP_DRAIN_FAILED")
+    tap.equal(d_outcome.err.code, code, code .. " drain: drain error is preserved")
+    tap.equal(draining:active(), false, code .. " drain: session is idle")
+    tap.equal(drain_host:open_trace_count(), 0, code .. " drain: host trace is closed")
+  end
+
+  -- final drain raises and close reports an unknown handle: still idle
+  local both = trace.new({
+    trace = function(opts)
+      if opts.enabled == false then
+        error({ code = "E_DEF_INVALID", message = "unknown handle" }, 0)
+      end
+      return 3
+    end,
+    trace_get = function()
+      error({ code = "E_TIMEOUT", message = "slow" }, 0)
+    end,
+  })
+  both:start(nil)
+  local both_ok, both_outcome = both:stop()
+  tap.ok(both_ok, "drain error plus unknown-handle close still stops")
+  tap.equal(both_outcome.kind, trace.STOP_DRAIN_FAILED, "drain error is still reported")
+  tap.equal(both:active(), false, "session is idle")
 
   -- invalid handle shape from the host
   local weird = trace.new({

@@ -7,6 +7,17 @@
 -- per-plugin trace limit, declared-kind trace recording, and drain-on-read
 -- buffers. Any access to `bitty.ui` (or an unknown namespace) is recorded so
 -- tests can assert the plugin never touches UI surfaces. It performs no I/O.
+--
+-- Deliberate simplifications versus the real host:
+-- - `commands.register` rejects an id not reserved in `[lazy].commands`
+--   immediately. The real bridge only captures the registration (and returns
+--   nothing); the runtime validator then fails ACTIVATION after capture for
+--   an undeclared or duplicate command.
+-- - The real bridge keeps only `id`, `title`, `description`, and `run`;
+--   `args_schema` / `result_schema` are not enforced by the host today.
+-- - `notify.show` rejects a body over NOTIFY_MAX_CHARS characters, modeling
+--   the downstream chrome rejection (`MAX_NOTIFICATION_TEXT_LEN`) rather
+--   than the bridge, which accepts any string.
 
 local MockHost = {}
 MockHost.__index = MockHost
@@ -17,6 +28,8 @@ MockHost.DEFAULT_TRACE_MAX_EVENTS = 1000
 MockHost.TRACE_MAX_EVENTS_LIMIT = 10000
 MockHost.TRACE_FILTER_MAX_BYTES = 128
 MockHost.MAX_INSPECT_ITEMS = 1024
+-- Mirrors bitty-ui `window_chrome.rs` `MAX_NOTIFICATION_TEXT_LEN`.
+MockHost.NOTIFY_MAX_CHARS = 256
 
 local function fail(class, code, message)
   error({ class = class, code = code, message = message }, 0)
@@ -87,6 +100,8 @@ function MockHost.new(options)
   end
   self.view = options.view or { plugins = {}, commands = {}, events = {} }
   self.notify_fails = options.notify_fails or false
+  -- When set to an error table, the next trace_get raises it (one shot).
+  self.trace_get_error = nil
   self.commands = {}
   self.notifications = {}
   self.ui_accesses = {}
@@ -179,7 +194,7 @@ function MockHost:trace(opts)
     fail("validation", "E_DEF_INVALID", "debug.trace max_events out of range")
   end
   if self:open_trace_count() >= MockHost.MAX_TRACES_PER_PLUGIN then
-    fail("validation", "E_DEF_LIMIT", "debug.trace limit of 4 open traces reached")
+    fail("budget", "E_DEF_LIMIT", "debug.trace limit (4 per plugin) exceeded")
   end
   local handle = self.next_trace_handle
   self.next_trace_handle = handle + 1
@@ -194,6 +209,11 @@ function MockHost:trace_get(handle)
   end
   if math.type(handle) ~= "integer" then
     fail("validation", "E_DEF_INVALID", "debug.trace_get handle must be an integer")
+  end
+  if self.trace_get_error ~= nil then
+    local injected = self.trace_get_error
+    self.trace_get_error = nil
+    error(injected, 0)
   end
   local entry = self.traces[handle]
   if entry == nil then
@@ -269,7 +289,6 @@ function MockHost:build_bitty()
           fail("validation", "E_COMMAND_DUPLICATE", "duplicate command: " .. qualified)
         end
         self.commands[qualified] = def
-        return #self.calls + 1
       end,
     },
     notify = {
@@ -286,6 +305,11 @@ function MockHost:build_bitty()
         end
         if payload.body ~= nil and type(payload.body) ~= "string" then
           fail("validation", "E_DEF_INVALID", "notification body must be a string")
+        end
+        local length = payload.body and utf8.len(payload.body) or 0
+        if length == nil or length > MockHost.NOTIFY_MAX_CHARS then
+          self.rejected_notifications = (self.rejected_notifications or 0) + 1
+          fail("validation", "E_TEXT_TOO_LONG", "notification body exceeds 256 characters")
         end
         self.notifications[#self.notifications + 1] = deepcopy(payload)
         return true
