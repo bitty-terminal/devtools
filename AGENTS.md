@@ -27,10 +27,12 @@
   filesystem, network, process spawn, clipboard, terminal input, and
   install-time code execution stay out. A wider request needs an explicitly
   scoped task and a reviewed privacy and security note; never widen silently.
-- UI work (panels, overlays, rich surfaces, mounted views) is deferred until
-  [bitty#1442](https://github.com/bitty-terminal/bitty/issues/1442) closes and
-  the upstream GUI APIs are finished. Do not call `bitty.ui` or request `ui.*`
-  capabilities before then.
+- UI work (panels, overlays, rich surfaces, mounted views) stays
+  notification-only by scope. The upstream overlay APIs have landed (CTX-0911
+  edge-band `UiBlock` rendering, bitty#1594 / issue #1570; CTX-0941 focusable
+  overlay and transient input capture, bitty#1654 / #1633). Do not cite
+  bitty#1442 (session-restore input history, closed) as a GUI blocker. Do not
+  call `bitty.ui` or request `ui.*` capabilities before a scoped UI task.
 
 ## CarryCtx and agents
 

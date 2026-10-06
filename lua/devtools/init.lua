@@ -7,7 +7,8 @@
 -- Surface: Plugin API v1 (`bitty.commands`, `bitty.notify`) plus the
 -- read-only `bitty.debug` namespace (`inspect`, `trace`, `trace_get`).
 -- `bitty.debug.control` is never called, and no `bitty.ui` surface is used:
--- UI work is deferred until bitty-terminal/bitty#1442 closes.
+-- UI stays notification-only by scope; the upstream overlay APIs have landed
+-- (CTX-0911, CTX-0941), and bitty#1442 is not a GUI blocker.
 --
 -- Capabilities used here must match `bitty-plugin.toml`: `debug.inspect`,
 -- `debug.trace`, and `platform.notify`. Every host call is wrapped in pcall;
