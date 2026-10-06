@@ -2,9 +2,10 @@
 --- HAND-WRITTEN; NOT PART OF THE SDK GENERATED SURFACE.
 ---
 --- The vendored SDK `bitty.d.lua` (bitty-plugin-sdk e1723b6) does not define
---- `bitty.debug` yet. This file mirrors the host contract on bitty main
---- (c4af172b, bitty-terminal/bitty#1573: `crates/bitty-lua/src/host.rs`
---- `HostServices::debug_*` and `crates/bitty-runtime/src/plugin_runtime/debug.rs`).
+--- `bitty.debug` yet. This file mirrors the host contract introduced on bitty
+--- main (c4af172b, bitty-terminal/bitty#1573: `crates/bitty-lua/src/host.rs`
+--- `HostServices::debug_*` and `crates/bitty-runtime/src/plugin_runtime/debug.rs`),
+--- re-verified unchanged on bitty main `811ba94c` (CTX-0005).
 --- Drop it once the SDK surface generates `bitty.debug`.
 ---
 --- `bitty.debug.control` exists on the host but always fails closed with

@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Not usable on a real host yet. On bitty `main` `c4af172b`,
-`PluginRuntime::deliver_event`, `dispatch_command`, and `drain_notifications`
-have no production caller. Live tracing, command dispatch, and notification
-delivery depend on bitty#1564 (`CTX-0892`). Until it lands, traces record
-nothing and the commands are reachable only through runtime test seams. UI
-is deferred until bitty#1442 closes.
+Verified on bitty `main` `811ba94c`. The `bitty.debug` backend
+(bitty#1573, `c4af172b`) and the app-loop wiring (bitty#1564, `CTX-0892`)
+are both merged: `dispatch_command` and `deliver_event` have production
+callers, while `drain_notifications` still has none, so command results
+return through dispatch while notification bodies queue unseen. Of the nine
+declared trace kinds, the live loop emits only `terminal.title-changed` and
+`focus.changed`; the other seven record only through test seams.
+Live-host evidence (CTX-0005): all seven commands dispatch with bounded text,
+nine delivered kinds all record, `terminal.*` filtering holds, and 12
+notifications queue. UI stays notification-only by scope; the upstream
+overlay APIs have landed (CTX-0911 bitty#1594 / issue #1570; CTX-0941
+bitty#1654 / #1633). bitty#1442 (session-restore input history, closed) is
+not a GUI blocker.
 
 ### Added
 

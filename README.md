@@ -5,19 +5,28 @@ Read-only inspection and event tracing of the Bitty plugin runtime
 (plugins, commands, event subscriptions, its own grants) and records bounded
 event traces, and shows the results as host-rendered text notifications.
 
-> Status: pre-release, not usable on a real host yet. The plugin targets the
-> read-only `bitty.debug` backend on bitty `main` (`c4af172b`, bitty#1573).
-> On that revision `PluginRuntime::deliver_event`, `dispatch_command`, and
-> `drain_notifications` have no production caller. Live tracing, command
-> dispatch, and notification delivery depend on
-> [bitty#1564](https://github.com/bitty-terminal/bitty/pull/1564)
-> (`CTX-0892`, wire the plugin runtime into the app loop). Until that lands,
-> traces record nothing on a real host and the commands are reachable only
-> through runtime test seams. The plugin is verified against the local mock
-> host and LuaLS definitions only. UI surfaces (panels, overlays, mounted
-> views) are deferred until
-> [bitty#1442](https://github.com/bitty-terminal/bitty/issues/1442) closes and
-> the upstream GUI APIs are finished.
+> Status: pre-release, verified on bitty `main` `811ba94c`. The read-only
+> `bitty.debug` backend (bitty#1573, `c4af172b`) and the app-loop wiring
+> (bitty#1564, `CTX-0892`) are both merged. `dispatch_command` and
+> `deliver_event` have production callers (`terminal_app.rs`: dispatch on
+> composer verbs and band clicks; deliver per-tick runtime events plus
+> `overlay.released`); `drain_notifications` still has no production caller,
+> so command results return through dispatch while notification bodies queue
+> unseen. Of the nine declared trace kinds, the live loop emits only
+> `terminal.title-changed` and `focus.changed` (plus `workspace.*` and
+> `overlay.released`, which this plugin does not declare); the other seven
+> record only when delivered through test seams. Live-host evidence
+> (CTX-0005): all seven commands dispatch and return bounded text (`plugins`
+> 54 bytes / 1 row, `commands` 447 bytes / 7 rows, `events` 15 bytes /
+> 0 rows, `grants` 50 bytes / 3 grants, `trace-start` / `trace-dump`
+> 9 records / `trace-stop` close cleanly, `terminal.*` filter keeps
+> `terminal.bell` and drops `focus.changed`, 12 notifications queued). The
+> plugin is also verified against the local mock host (342 assertions) and
+> LuaLS definitions. UI surfaces (panels, overlays, mounted views) stay
+> notification-only by scope; the upstream overlay APIs have landed (CTX-0911
+> edge-band `UiBlock` rendering, bitty#1594 / issue #1570; CTX-0941 focusable
+> overlay and transient input capture, bitty#1654 / #1633). Do not cite
+> bitty#1442 (session-restore input history, closed) as a GUI blocker.
 
 ## Commands
 

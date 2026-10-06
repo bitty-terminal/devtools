@@ -33,8 +33,8 @@ plugin-api = "^1.0"
 # - `platform.notify`: show the bounded text summaries.
 #
 # `debug.control` (high-risk runtime control) and every `ui.*` identifier are
-# intentionally absent: this plugin never mutates runtime state, and UI
-# surfaces are deferred until bitty-terminal/bitty#1442 closes.
+# intentionally absent: this plugin never mutates runtime state, and UI stays
+# notification-only by scope (upstream overlay APIs: CTX-0911, CTX-0941).
 debug.inspect = true
 debug.trace = true
 platform.notify = true
