@@ -14,6 +14,8 @@
 -- The `debug` table is injected (the host `bitty.debug` in production, a
 -- stub in tests), so this module performs no ambient host access. Every host
 -- call is wrapped in pcall; failures return `false, err` and never raise.
+-- A missing namespace or function (older host predating bitty#1573) is
+-- reported as plugin-local E_BRIDGE_ABSENT without changing state.
 
 local M = {}
 
@@ -21,12 +23,34 @@ local M = {}
 M.E_TRACE_ACTIVE = "E_TRACE_ACTIVE"
 M.E_TRACE_INACTIVE = "E_TRACE_INACTIVE"
 M.E_TRACE_GONE = "E_TRACE_GONE"
+-- The host bridge function the call needed is absent: an older host that
+-- predates the read-only debug backend (bitty#1573), or a test double with
+-- the namespace omitted. Reported fail-closed; the machine changes nothing.
+M.E_BRIDGE_ABSENT = "E_BRIDGE_ABSENT"
 
 local Session = {}
 Session.__index = Session
 
 local function local_error(code, message)
   return { code = code, message = message }
+end
+
+-- Return `debug[name]` when it is callable, nil otherwise. Never indexes a
+-- nil `debug`, so a missing namespace degrades to E_BRIDGE_ABSENT instead
+-- of raising "attempt to index a nil value" past the caller's pcall.
+local function bridge_fn(debug, name)
+  if type(debug) ~= "table" then
+    return nil
+  end
+  local fn = debug[name]
+  if type(fn) ~= "function" then
+    return nil
+  end
+  return fn
+end
+
+local function absent_error(name)
+  return local_error(M.E_BRIDGE_ABSENT, "bitty.debug." .. name .. " is not available on this host")
 end
 
 local function is_handle(value)
@@ -55,11 +79,15 @@ function Session:start(filter)
   if self.handle ~= nil then
     return false, local_error(M.E_TRACE_ACTIVE, "a trace is already running; stop it first")
   end
+  local trace_fn = bridge_fn(self.debug, "trace")
+  if trace_fn == nil then
+    return false, absent_error("trace")
+  end
   local opts = { enabled = true }
   if filter ~= nil then
     opts.filter = filter
   end
-  local ok, result = pcall(self.debug.trace, opts)
+  local ok, result = pcall(trace_fn, opts)
   if not ok then
     return false, result
   end
@@ -77,7 +105,11 @@ function Session:dump()
   if self.handle == nil then
     return false, local_error(M.E_TRACE_INACTIVE, "no trace is running")
   end
-  local ok, result = pcall(self.debug.trace_get, self.handle)
+  local trace_get_fn = bridge_fn(self.debug, "trace_get")
+  if trace_get_fn == nil then
+    return false, absent_error("trace_get")
+  end
+  local ok, result = pcall(trace_get_fn, self.handle)
   if not ok then
     return false, result
   end
@@ -108,13 +140,24 @@ function Session:stop()
   if self.handle == nil then
     return false, local_error(M.E_TRACE_INACTIVE, "no trace is running")
   end
+  -- Both sides of the stop are needed (drain, then close). When either is
+  -- absent the handle is kept so stop can be retried, mirroring a transient
+  -- close failure.
+  local trace_get_fn = bridge_fn(self.debug, "trace_get")
+  if trace_get_fn == nil then
+    return false, absent_error("trace_get")
+  end
+  local trace_fn = bridge_fn(self.debug, "trace")
+  if trace_fn == nil then
+    return false, absent_error("trace")
+  end
   local handle = self.handle
-  local drained_ok, drained = pcall(self.debug.trace_get, handle)
+  local drained_ok, drained = pcall(trace_get_fn, handle)
   if drained_ok and drained == nil then
     self:reset()
     return true, { kind = M.STOP_GONE }
   end
-  local ok, err = pcall(self.debug.trace, { enabled = false, handle = handle })
+  local ok, err = pcall(trace_fn, { enabled = false, handle = handle })
   if not ok and not (type(err) == "table" and err.code == "E_DEF_INVALID") then
     return false, err
   end

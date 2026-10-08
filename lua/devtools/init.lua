@@ -13,7 +13,9 @@
 -- Capabilities used here must match `bitty-plugin.toml`: `debug.inspect`,
 -- `debug.trace`, and `platform.notify`. Every host call is wrapped in pcall;
 -- a failure is surfaced as a concise notification carrying the host error
--- code and never escapes a command handler.
+-- code and never escapes a command handler. A missing bridge namespace or
+-- function (older host, revoked grant) degrades to an `E_BRIDGE_ABSENT`
+-- error result through the same path, never a raise.
 --
 -- `args_schema` / `result_schema` document the intended contract only: the
 -- current host bridge keeps `id`, `title`, `description`, and `run` and does
@@ -33,18 +35,44 @@ local TRACE_FILTER_MAX_BYTES = 128
 
 local session = trace.new(bitty.debug)
 
+-- Return `bitty[namespace][name]` when it is callable, nil otherwise. Hosts
+-- predating the read-only debug backend (bitty#1573) have no `bitty.debug`,
+-- and a revoked grant can surface as a missing `bitty.notify`. Indexing a
+-- missing namespace raises past pcall, so every handler below resolves its
+-- bridge function through here first and degrades to a bounded error result
+-- (E_BRIDGE_ABSENT) instead of a raise.
+local function bridge_fn(namespace, name)
+  local space = bitty and bitty[namespace]
+  local fn = space and space[name]
+  if type(fn) == "function" then
+    return fn
+  end
+  return nil
+end
+
 -- Show a one-line notice derived from `text` (at most
 -- format.NOTIFY_MAX_CHARS characters, the host chrome limit) and return the
 -- full bounded `text` as the command result. A notify failure (rate policy,
--- revoked grant) is swallowed so it can never turn a successful command into
--- a crash.
+-- revoked grant) or an absent notify bridge is swallowed so it can never
+-- turn a successful command into a crash.
 local function show(title, text, urgency)
-  pcall(bitty.notify.show, {
-    title = title,
-    body = format.notice(text),
-    urgency = urgency or "low",
-  })
+  local notify = bridge_fn("notify", "show")
+  if notify ~= nil then
+    pcall(notify, {
+      title = title,
+      body = format.notice(text),
+      urgency = urgency or "low",
+    })
+  end
   return text
+end
+
+local function bridge_absent(action, qualified)
+  return show(
+    NOTIFY_TITLE,
+    format.error(action, { code = "E_BRIDGE_ABSENT", message = qualified .. " is not available on this host" }),
+    "normal"
+  )
 end
 
 local function show_error(action, err)
@@ -53,7 +81,11 @@ end
 
 local function inspect_command(target)
   return function(_args)
-    local ok, result = pcall(bitty.debug.inspect, target)
+    local inspect = bridge_fn("debug", "inspect")
+    if inspect == nil then
+      return bridge_absent("inspect " .. target, "bitty.debug.inspect")
+    end
+    local ok, result = pcall(inspect, target)
     if not ok then
       return show_error("inspect " .. target, result)
     end
