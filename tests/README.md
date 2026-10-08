@@ -28,18 +28,18 @@ just test-luals
 
 ## Layout
 
-| Path                            | Purpose                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `run.lua`                       | Plain-Lua runner; exits non-zero on assertion failure.                                                                   |
-| `support/tap.lua`               | Assertion helper (no external test framework).                                                                           |
-| `support/mock_host.lua`         | Fail-closed `bitty` stub: commands, notify, and `bitty.debug` with trace cap and declared-kind recording.                |
-| `spec/format_spec.lua`          | Rendering, truncation, sanitization, and bounds unit tests.                                                              |
-| `spec/trace_spec.lua`           | Trace state machine unit tests (start/dump/stop, E_DEF_LIMIT, nil drain, retry).                                         |
-| `spec/init_spec.lua`            | Entry-point behavior against the mock host, including the no-UI assertion.                                               |
-| `lua-defs/bitty.d.lua`          | Unmodified SDK LuaLS definitions (bitty-plugin-sdk `e1723b6`, sha256 `9aef9397...`).                                     |
-| `lua-defs/bitty-debug.d.lua`    | Local `bitty.debug` definitions mirroring bitty `c4af172b`, re-verified on `811ba94c`; `control` deliberately undefined. |
-| `lua-defs/negative-fixture.lua` | Excluded-surface fixture that LuaLS must reject.                                                                         |
-| `check-luals.sh`                | POSIX shell positive/negative LuaLS workspace check.                                                                     |
+| Path                            | Purpose                                                                                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.lua`                       | Plain-Lua runner; exits non-zero on assertion failure.                                                                                                                                       |
+| `support/tap.lua`               | Assertion helper (no external test framework).                                                                                                                                               |
+| `support/mock_host.lua`         | Fail-closed `bitty` stub: commands, notify, and `bitty.debug` with trace cap and declared-kind recording. Namespaces can be omitted (`omit_debug`, `omit_notify`) to simulate an older host. |
+| `spec/format_spec.lua`          | Rendering, truncation, sanitization, and bounds unit tests.                                                                                                                                  |
+| `spec/trace_spec.lua`           | Trace state machine unit tests (start/dump/stop, E_DEF_LIMIT, nil drain, retry).                                                                                                             |
+| `spec/init_spec.lua`            | Entry-point behavior against the mock host, including the no-UI assertion.                                                                                                                   |
+| `lua-defs/bitty.d.lua`          | Unmodified SDK LuaLS definitions (bitty-plugin-sdk `e1723b6`, sha256 `9aef9397...`).                                                                                                         |
+| `lua-defs/bitty-debug.d.lua`    | Local `bitty.debug` definitions mirroring bitty `c4af172b`, re-verified on `811ba94c`; `control` deliberately undefined.                                                                     |
+| `lua-defs/negative-fixture.lua` | Excluded-surface fixture that LuaLS must reject.                                                                                                                                             |
+| `check-luals.sh`                | POSIX shell positive/negative LuaLS workspace check.                                                                                                                                         |
 
 ## Known gaps
 

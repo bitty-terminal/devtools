@@ -86,6 +86,12 @@ function MockHost.new(options)
   options = options or {}
   local self = setmetatable({}, MockHost)
   self.plugin_id = options.plugin_id or "bitty-featured.devtools"
+  -- `omit_debug` / `omit_notify` simulate a host predating the read-only
+  -- debug backend (or a revoked notify grant surfacing as a missing
+  -- namespace): the namespace becomes an empty table, so plugin reads never
+  -- trip the unknown-namespace trap and resolve to nil functions.
+  self.omit_debug = options.omit_debug or false
+  self.omit_notify = options.omit_notify or false
   self.grants = {}
   for _, name in ipairs(options.grants or {}) do
     self.grants[name] = true
@@ -271,29 +277,9 @@ function MockHost:build_bitty()
       fail("runtime", "E_NOT_IMPLEMENTED", "bitty.debug.control is not implemented by this host")
     end,
   }
-  local root = {
-    api_version = "1.0.0",
-    commands = {
-      register = function(def)
-        if type(def) ~= "table" or type(def.id) ~= "string" or type(def.title) ~= "string" then
-          fail("validation", "E_DEF_INVALID", "command definition is invalid")
-        end
-        if type(def.run) ~= "function" then
-          fail("validation", "E_DEF_INVALID", "command 'run' must be a function")
-        end
-        local qualified = self.plugin_id .. ":" .. def.id
-        if not self.declared_commands[qualified] then
-          fail("validation", "E_COMMAND_UNDECLARED", "command is not reserved in the manifest: " .. qualified)
-        end
-        if self.commands[qualified] ~= nil then
-          fail("validation", "E_COMMAND_DUPLICATE", "duplicate command: " .. qualified)
-        end
-        self.commands[qualified] = def
-      end,
-    },
-    notify = {
-      show = function(payload)
-        self:record_call("notify.show")
+  local notify = {
+    show = function(payload)
+      self:record_call("notify.show")
         if not self.grants["platform.notify"] then
           fail("runtime", "E_CAPABILITY_DENIED", "capability 'platform.notify' is not granted")
         end
@@ -314,9 +300,36 @@ function MockHost:build_bitty()
         self.notifications[#self.notifications + 1] = deepcopy(payload)
         return true
       end,
+  }
+  local root = {
+    api_version = "1.0.0",
+    commands = {
+      register = function(def)
+        if type(def) ~= "table" or type(def.id) ~= "string" or type(def.title) ~= "string" then
+          fail("validation", "E_DEF_INVALID", "command definition is invalid")
+        end
+        if type(def.run) ~= "function" then
+          fail("validation", "E_DEF_INVALID", "command 'run' must be a function")
+        end
+        local qualified = self.plugin_id .. ":" .. def.id
+        if not self.declared_commands[qualified] then
+          fail("validation", "E_COMMAND_UNDECLARED", "command is not reserved in the manifest: " .. qualified)
+        end
+        if self.commands[qualified] ~= nil then
+          fail("validation", "E_COMMAND_DUPLICATE", "duplicate command: " .. qualified)
+        end
+        self.commands[qualified] = def
+      end,
     },
+    notify = notify,
     debug = debug,
   }
+  if self.omit_debug then
+    root.debug = {}
+  end
+  if self.omit_notify then
+    root.notify = {}
+  end
   -- Trap every other namespace (ui, terminal, store, ...) so a test can
   -- assert the plugin never reaches outside its declared surface.
   return setmetatable(root, {

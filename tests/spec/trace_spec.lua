@@ -192,6 +192,33 @@ function M.run(context)
   local retry_ok = flaky:stop()
   tap.ok(retry_ok, "stop can be retried")
   tap.equal(flaky:active(), false, "retried stop returns to idle")
+
+  -- absent bridge: older host without bitty.debug fails closed, state kept
+  local bridgeless = trace.new({})
+  local bs_ok, bs_err = bridgeless:start(nil)
+  tap.equal(bs_ok, false, "start without bitty.debug.trace fails")
+  tap.equal(bs_err.code, trace.E_BRIDGE_ABSENT, "start reports E_BRIDGE_ABSENT")
+  tap.equal(bridgeless:active(), false, "absent bridge keeps the session idle")
+  local nildebug = trace.new(nil)
+  local nn_ok, nn_err = nildebug:start(nil)
+  tap.equal(nn_ok, false, "start with a nil debug namespace fails")
+  tap.equal(nn_err.code, trace.E_BRIDGE_ABSENT, "nil debug reports E_BRIDGE_ABSENT")
+
+  -- partially absent bridge: start succeeds, dump/stop fail closed retryably
+  local partial = trace.new({
+    trace = function()
+      return 9
+    end,
+  })
+  local p_ok = partial:start(nil)
+  tap.ok(p_ok, "start succeeds when only trace is present")
+  local pd_ok, pd_err = partial:dump()
+  tap.equal(pd_ok, false, "dump without bitty.debug.trace_get fails")
+  tap.equal(pd_err.code, trace.E_BRIDGE_ABSENT, "dump reports E_BRIDGE_ABSENT")
+  local ps_ok, ps_err = partial:stop()
+  tap.equal(ps_ok, false, "stop without bitty.debug.trace_get fails")
+  tap.equal(ps_err.code, trace.E_BRIDGE_ABSENT, "stop reports E_BRIDGE_ABSENT")
+  tap.equal(partial:active(), true, "absent bridge keeps the handle for retry")
 end
 
 return M

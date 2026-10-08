@@ -21,7 +21,7 @@ event traces, and shows the results as host-rendered text notifications.
 > 0 rows, `grants` 50 bytes / 3 grants, `trace-start` / `trace-dump`
 > 9 records / `trace-stop` close cleanly, `terminal.*` filter keeps
 > `terminal.bell` and drops `focus.changed`, 12 notifications queued). The
-> plugin is also verified against the local mock host (342 assertions) and
+> plugin is also verified against the local mock host (436 assertions) and
 > LuaLS definitions. UI surfaces (panels, overlays, mounted views) stay
 > notification-only by scope; the upstream overlay APIs have landed (CTX-0911
 > edge-band `UiBlock` rendering, bitty#1594 / issue #1570; CTX-0941 focusable
@@ -69,6 +69,9 @@ is shown as `<action> failed: <code>: <hint>`, for example
 `inspect plugins failed: E_CAPABILITY_DENIED: capability not granted` or
 `trace start failed: E_DEF_LIMIT: trace limit reached for this plugin`. A
 failed notification (rate policy) is ignored; the command still returns its
+text. A missing bridge namespace or function (a host predating the
+`bitty.debug` backend) reports `E_BRIDGE_ABSENT` through the same path, and
+an absent notify bridge skips the notification while still returning the
 text.
 
 ## Capabilities
@@ -93,6 +96,22 @@ the nine v1 observation kinds from the closed event set (`EventKind` in
 plugin subscribes to none of them; the declaration is what makes a kind
 visible to a trace.
 
+## Downstream enablement
+
+Plugin-side follow-through for
+[devtools#10](https://github.com/bitty-terminal/devtools/issues/10)
+(post-0.0.22: the issue body says "post-0.0.24" but the title governs, and
+bitty v0.0.22 released 2026-10-08, so the window is open). The plugin holds
+its side of each item defensively; host, registry, and palette work is
+tracked in the owning repositories, not done here.
+
+| Item                             | Plugin guarantee (this repo)                                                                                                                                                                                                                                               | External dependency                                                                                                                                                                               |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Notification/result surfacing | Every command returns its full text as the result plus a one-line notice; notify failure or an absent notify bridge never crashes a command.                                                                                                                               | Host must drain `drain_notifications` into tick/present and surface dispatcher results: [bitty#1827](https://github.com/bitty-terminal/bitty/issues/1827).                                        |
+| 2. Declared trace kinds          | All nine manifest kinds record when the host delivers them (mock suite delivers every kind in one drain); an absent `bitty.debug` bridge fails closed with `E_BRIDGE_ABSENT`. The manifest keeps all nine declarations (harmless preconditions) until the host catches up. | Host emits only `terminal.title-changed`, `focus.changed`, `workspace.*` today; the other seven kinds need emission: [bitty#1828](https://github.com/bitty-terminal/bitty/issues/1828).           |
+| 3. Command-invocation path       | All seven commands run with empty args, carry closed schemas and bounded titles, and return string results (consumer-contract test).                                                                                                                                       | Generic palette/keybinding to `dispatch_command` path, deny-by-default: [bitty#1829](https://github.com/bitty-terminal/bitty/issues/1829).                                                        |
+| 4. Registry + palette consumer   | Manifest validates with the authoritative linter; identity fields are present for metadata sync.                                                                                                                                                                           | Registry entry: [bitty-plugins#80](https://github.com/bitty-terminal/bitty-plugins/issues/80). Palette headless consumer test: [palette#31](https://github.com/bitty-terminal/palette/issues/31). |
+
 ## Privacy and security
 
 - Read-only: the plugin never calls `bitty.debug.control` or any mutating
@@ -112,15 +131,15 @@ visible to a trace.
 
 ## Layout
 
-| Path                      | Purpose                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| `bitty-plugin.toml`       | Manifest: identity, compatibility, capabilities, lazy commands and declared events. |
-| `lua/devtools/init.lua`   | Entry point: registers the seven commands and wires them to the modules below.      |
-| `lua/devtools/format.lua` | Pure, bounded text rendering of inspect results, trace drains, and errors.          |
-| `lua/devtools/trace.lua`  | Single-handle trace state machine (start / dump / stop, nil-drain recovery).        |
-| `tests/`                  | Plain-Lua behavior suite, mock host, and LuaLS conformance (see `tests/README.md`). |
-| `scripts/workflow-*.sh`   | CarryCtx snapshot publish/restore on `refs/heads/carryctx-snapshots`.               |
-| `.github/workflows/`      | CI quality gates, CodeQL, and the snapshot-source staleness check.                  |
+| Path                      | Purpose                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `bitty-plugin.toml`       | Manifest: identity, compatibility, capabilities, lazy commands and declared events.                     |
+| `lua/devtools/init.lua`   | Entry point: registers the seven commands and wires them to the modules below.                          |
+| `lua/devtools/format.lua` | Pure, bounded text rendering of inspect results, trace drains, and errors.                              |
+| `lua/devtools/trace.lua`  | Single-handle trace state machine (start / dump / stop, nil-drain recovery, absent-bridge fail-closed). |
+| `tests/`                  | Plain-Lua behavior suite, mock host, and LuaLS conformance (see `tests/README.md`).                     |
+| `scripts/workflow-*.sh`   | CarryCtx snapshot publish/restore on `refs/heads/carryctx-snapshots`.                                   |
+| `.github/workflows/`      | CI quality gates, CodeQL, and the snapshot-source staleness check.                                      |
 
 ## Development
 

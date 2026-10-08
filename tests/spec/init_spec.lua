@@ -145,6 +145,30 @@ function M.run(context)
   tap.contains(quiet_result, "3 grants", "result still returned when notify fails")
   tap.equal(#quiet.notifications, 0, "no notification recorded when notify fails")
 
+  -- absent bridge (older host without bitty.debug, or a missing notify
+  -- namespace): commands fail closed with E_BRIDGE_ABSENT, never raise
+  local no_debug = new_host({ omit_debug = true })
+  load_plugin(no_debug)
+  local nd_ok, nd_result = pcall(no_debug.run, no_debug, "plugins")
+  tap.ok(nd_ok, "inspect without bitty.debug does not raise")
+  tap.contains(nd_result, "E_BRIDGE_ABSENT", "absent debug.inspect is reported")
+  tap.equal(#no_debug.notifications, 1, "absent-bridge error still notifies when notify exists")
+  local nd_trace_ok, nd_trace = pcall(no_debug.run, no_debug, "trace-start")
+  tap.ok(nd_trace_ok, "trace-start without bitty.debug does not raise")
+  tap.contains(nd_trace, "trace start failed: E_BRIDGE_ABSENT", "absent debug.trace is reported")
+  local no_notify = new_host({ omit_notify = true })
+  load_plugin(no_notify)
+  local nn_ok, nn_result = pcall(no_notify.run, no_notify, "plugins")
+  tap.ok(nn_ok, "inspect without bitty.notify does not raise")
+  tap.contains(nn_result, "2 plugins", "result still returned when notify is absent")
+  tap.equal(#no_notify.notifications, 0, "no notification recorded when notify is absent")
+  local bare = new_host({ omit_debug = true, omit_notify = true })
+  load_plugin(bare)
+  local bare_ok, bare_result = pcall(bare.run, bare, "plugins")
+  tap.ok(bare_ok, "inspect without either bridge does not raise")
+  tap.contains(bare_result, "E_BRIDGE_ABSENT", "doubly absent bridge is reported")
+  tap.equal(#bare.notifications, 0, "doubly absent bridge notifies nothing")
+
   -- trace lifecycle through commands
   local tracer = new_host()
   load_plugin(tracer)
@@ -167,6 +191,45 @@ function M.run(context)
   tap.equal(tracer:open_trace_count(), 0, "trace-stop closes the host trace")
   tap.contains(tracer:run("trace-dump"), "trace dump failed: E_TRACE_INACTIVE", "dump after stop")
   tap.contains(tracer:run("trace-stop"), "trace stop failed: E_TRACE_INACTIVE", "stop after stop")
+
+  -- every declared manifest kind is recorded when the host delivers it.
+  -- Production hosts emit only a subset today (see README); the mock
+  -- delivers all nine, which is what keeps the manifest honest.
+  local kinds = new_host()
+  load_plugin(kinds)
+  kinds:run("trace-start")
+  kinds:deliver("terminal.opened", { terminal_id = 1 }, 1)
+  kinds:deliver("terminal.closed", { terminal_id = 1 }, 1)
+  kinds:deliver("terminal.title-changed", { title = "t" }, 1)
+  kinds:deliver("terminal.cwd-changed", { cwd = "/tmp" }, 1)
+  kinds:deliver("terminal.bell", {}, 1)
+  kinds:deliver("focus.changed", { focused = true }, 1)
+  kinds:deliver("selection.changed", { selected = true }, 1)
+  kinds:deliver("process.exited", { exit_code = 0 }, 1)
+  kinds:deliver("config.reloaded", { path = "bitty.toml" }, 1)
+  local kinds_dump = kinds:run("trace-dump")
+  tap.contains(kinds_dump, "9 records, 0 dropped", "every declared kind is traced")
+  for _, kind in ipairs(EVENTS) do
+    tap.contains(kinds_dump, kind, "traced: " .. kind)
+  end
+
+  -- downstream consumer contract (palette-shaped): every command runs with
+  -- empty args, returns its full text, and emits exactly one single-line
+  -- notice that fits the host chrome limit. A registry or palette consumer
+  -- may rely on this without reading the implementation.
+  local consumer = new_host()
+  load_plugin(consumer)
+  local seen = #consumer.notifications
+  for _, id in ipairs({ "plugins", "commands", "events", "grants", "trace-start", "trace-dump", "trace-stop" }) do
+    local c_ok, c_result = pcall(consumer.run, consumer, id)
+    tap.ok(c_ok, "consumer: " .. id .. " does not raise")
+    tap.equal(type(c_result), "string", "consumer: " .. id .. " returns text")
+    tap.equal(#consumer.notifications, seen + 1, "consumer: " .. id .. " emits one notice")
+    seen = seen + 1
+    local note = consumer:last_notification()
+    tap.not_contains(note.body, "\n", "consumer: " .. id .. " notice is one line")
+    tap.le(utf8.len(note.body), format.NOTIFY_MAX_CHARS, "consumer: " .. id .. " notice fits chrome")
+  end
 
   -- filter argument
   local filtering = new_host()
@@ -286,7 +349,7 @@ function M.run(context)
 
   -- the plugin never reaches outside commands/notify/debug, and never calls
   -- debug.control
-  for _, probe in ipairs({ host, denied, tracer, filtering, overflow, dropped, big }) do
+  for _, probe in ipairs({ host, denied, tracer, filtering, overflow, dropped, big, no_debug, no_notify, bare, kinds, consumer }) do
     tap.equal(#probe.ui_accesses, 0, "no ui or other namespace access")
     for _, call in ipairs(probe.calls) do
       tap.ok(call ~= "debug.control", "debug.control is never called")

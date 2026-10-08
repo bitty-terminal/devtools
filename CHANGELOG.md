@@ -19,9 +19,28 @@ nine delivered kinds all record, `terminal.*` filtering holds, and 12
 notifications queue. UI stays notification-only by scope; the upstream
 overlay APIs have landed (CTX-0911 bitty#1594 / issue #1570; CTX-0941
 bitty#1654 / #1633). bitty#1442 (session-restore input history, closed) is
-not a GUI blocker.
+not a GUI blocker. Plugin-side follow-through for devtools#10 items 2-5:
+host work is tracked in bitty#1827 (notification drain), bitty#1828
+(remaining trace kinds), and bitty#1829 (palette/keybinding invocation);
+registry onboarding in bitty-plugins#80 and the palette consumer test in
+palette#31.
 
 ### Added
+
+- Fail-closed absent-bridge handling: every `bitty.debug` / `bitty.notify`
+  function resolves through a presence guard. A missing namespace or
+  function (a host predating the read-only debug backend) returns an
+  `E_BRIDGE_ABSENT` error result and never raises; an absent notify bridge
+  skips the notification while still returning the command result. The mock
+  host gains `omit_debug` / `omit_notify` namespace simulation.
+- Downstream consumer contract (devtools#10 items 3-4): a behavior-test block
+  proving all seven commands run with empty args, return string results, and
+  emit exactly one single-line notice within the host chrome limit — the
+  guarantee a palette or registry consumer may rely on.
+- Full nine-kind trace coverage in the mock suite (devtools#10 item 2):
+  every declared manifest kind is delivered and asserted in a single drain;
+  production emission of the seven un-emitted kinds is tracked in
+  bitty#1828, so the manifest keeps all nine declarations.
 
 - Read-only runtime inspection commands `plugins`, `commands`, `events`, and
   `grants` over `bitty.debug.inspect` (bitty#1573), shown as bounded
