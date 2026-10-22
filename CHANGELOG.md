@@ -55,7 +55,7 @@ palette#31.
   result.
 - Manifest requesting only `debug.inspect`, `debug.trace`, and
   `platform.notify`, with the nine v1 observation event kinds declared so
-  traces have something to record. `compat.bitty = ">=0.0.21,<1.0"` admits
+  traces have something to record. `compat.bitty = ">=0.0.21"` admits
   the current pre-1.0 host.
 - Pure formatting module with named output bounds and control-byte
   sanitization. Host errors are surfaced as `<action> failed: <code>`
@@ -70,10 +70,9 @@ palette#31.
 
 ### Changed
 
-- Cap `compat.bitty` at `<0.1` (`>=0.0.21,<0.1`) so an install on a future
-  0.1 host fails closed until the plugin is re-verified. The 0.x minors may
-  break the plugin API, and the sibling official plugins already use the same
-  ceiling.
+- `compat.bitty` is minimum-only (`>=0.0.21`): the floor is unchanged, and no
+  ceiling is declared, so a newer host is admitted rather than failed closed
+  before the plugin can run.
 - The repository is Lua-only: `package.json`, `bun.lock`, commitlint,
   lefthook, and the JavaScript LuaLS wrapper are removed, along with the
   `just install`, `commit-check`, and `hooks-*` recipes, the Dependabot `bun`

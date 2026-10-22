@@ -17,9 +17,12 @@ description = "Read-only inspection and event tracing of the Bitty plugin runtim
 license = "MIT"
 
 [compat]
-# Application and Plugin API ranges. Adjust to the host release you target;
-# both are syntax-validated here and resolved by the host at install time.
-bitty = ">=0.0.21,<0.1"
+# Application and Plugin API requirements. The Bitty range is minimum-only: the
+# floor is the first host that carries the surfaces this plugin uses, and no
+# ceiling is declared, so a newer host is admitted instead of being rejected
+# before the plugin can run. Both values are syntax-validated here and resolved
+# by the host at install time.
+bitty = ">=0.0.21"
 plugin-api = "^1.0"
 
 [capabilities]
