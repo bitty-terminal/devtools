@@ -70,6 +70,10 @@ palette#31.
 
 ### Changed
 
+- Cap `compat.bitty` at `<0.1` (`>=0.0.21,<0.1`) so an install on a future
+  0.1 host fails closed until the plugin is re-verified. The 0.x minors may
+  break the plugin API, and the sibling official plugins already use the same
+  ceiling.
 - The repository is Lua-only: `package.json`, `bun.lock`, commitlint,
   lefthook, and the JavaScript LuaLS wrapper are removed, along with the
   `just install`, `commit-check`, and `hooks-*` recipes, the Dependabot `bun`
