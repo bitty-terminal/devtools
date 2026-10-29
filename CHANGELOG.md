@@ -81,6 +81,12 @@ palette#31.
   `bunx --bun`: markdownlint-cli2 0.23.2, Prettier 3.9.6, and the SDK
   `bitty-plugin-lint` at `bitty-plugin-sdk` commit `e1723b6`. CI reads the Bun
   version from `.bun-version`.
+
+### Fixed
+
+- The Markdown gate ignores nested `node_modules` at any depth and
+  `.worktrees`, so the primary checkout no longer lints the Markdown of
+  linked worktrees and gates only this repository's sources (`CTX-0006`).
 - The Lua syntax gate uses `luac5.4 -p` (the host VM implements a Lua 5.4
   subset) instead of the Lua 5.1 `luaparse` grammar, plus a `lua-control`
   recipe that confirms invalid Lua is rejected. LuaLS conformance runs as the
