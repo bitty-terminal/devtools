@@ -1,5 +1,7 @@
 # Bitty DevTools
 
+## Overview
+
 Read-only inspection and event tracing of the Bitty plugin runtime
 (`bitty-featured.devtools`). It summarizes what the plugin host knows
 (plugins, commands, event subscriptions, its own grants) and records bounded
@@ -28,21 +30,56 @@ event traces, and shows the results as host-rendered text notifications.
 > overlay and transient input capture, bitty#1654 / #1633). Do not cite
 > bitty#1442 (session-restore input history, closed) as a GUI blocker.
 
+Run any command as `bitty-featured.devtools:<name>` from the command palette or
+a user keymap; the plugin installs no default chord. For example, run
+`bitty-featured.devtools:plugins` and the command result summarizes every
+plugin id, version, lifecycle state, and generation the host reports; a
+one-line notice is also queued as a notification when the host drains them.
+The plugin has no panel or overlay surface: results are bounded text
+notifications and command results.
+
+## Install
+
+Prerequisites:
+
+- Bitty `>=0.0.21` with Plugin API `^1.0` (the manifest `[compat]` range).
+- Consent to `debug.inspect`, `debug.trace`, and `platform.notify`; the plugin
+  requests no UI, filesystem, process, network, or clipboard authority.
+- `just`, `bun`, `lua5.4`, and `luac5.4` only when you build or test from a
+  checkout.
+
+Install from a local checkout:
+
+```sh
+git clone https://github.com/bitty-terminal/devtools.git
+cd devtools
+bitty plugin install "$PWD"
+bitty plugin enable bitty-featured.devtools
+bitty plugin list
+```
+
+`bitty plugin install <path>` stages the package under the XDG data store and
+records the capabilities you consent to; it executes no plugin code (`--yes`
+approves non-interactively). Verify activation with `bitty plugin list`: the
+entry must show `bitty-featured.devtools`, version `0.1.0`, source
+`local-path`, enabled, and the three grants. `bitty plugin info
+bitty-featured.devtools` prints the recorded grant set.
+
 ## Commands
 
 All commands are plugin-qualified as `bitty-featured.devtools:<name>`. Every
 command returns its full rendered text as the command result and shows a
 one-line notice of it, at most 256 characters, as a notification.
 
-| Command       | Behavior                                                                                                                                                   |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plugins`     | Summarize `bitty.debug.inspect("plugins")`: id, version, lifecycle state, generation.                                                                      |
-| `commands`    | Summarize registered commands (`plugin:id - title`).                                                                                                       |
-| `events`      | Summarize event subscriptions (`plugin <- kind`).                                                                                                          |
-| `grants`      | List the capabilities granted to this plugin (the host never exposes other plugins' grants).                                                               |
-| `trace-start` | Open one trace over the declared event kinds. Optional argument `filter` (exact kind, or a prefix ending in `*`, such as `terminal.*`; at most 128 bytes). |
-| `trace-dump`  | Drain the buffered records and summarize the most recent ones, with the drained and dropped counts.                                                        |
-| `trace-stop`  | Drain the final records and close the trace. If the final drain fails, the trace is still closed and the drain error is reported.                          |
+| Command                               | Behavior                                                                                                                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bitty-featured.devtools:plugins`     | Summarize `bitty.debug.inspect("plugins")`: id, version, lifecycle state, generation.                                                                      |
+| `bitty-featured.devtools:commands`    | Summarize registered commands (`plugin:id - title`).                                                                                                       |
+| `bitty-featured.devtools:events`      | Summarize event subscriptions (`plugin <- kind`).                                                                                                          |
+| `bitty-featured.devtools:grants`      | List the capabilities granted to this plugin (the host never exposes other plugins' grants).                                                               |
+| `bitty-featured.devtools:trace-start` | Open one trace over the declared event kinds. Optional argument `filter` (exact kind, or a prefix ending in `*`, such as `terminal.*`; at most 128 bytes). |
+| `bitty-featured.devtools:trace-dump`  | Drain the buffered records and summarize the most recent ones, with the drained and dropped counts.                                                        |
+| `bitty-featured.devtools:trace-stop`  | Drain the final records and close the trace. If the final drain fails, the trace is still closed and the drain error is reported.                          |
 
 The plugin holds at most one trace at a time; `trace-start` while a trace is
 running reports `E_TRACE_ACTIVE`. If the host drops the trace (reload,
@@ -61,6 +98,47 @@ Each command definition carries `args_schema` and `result_schema` as
 documentation of the intended contract. The current host bridge keeps only
 `id`, `title`, `description`, and `run` and does not enforce them, so the
 plugin validates the `filter` argument itself.
+
+## Configuration
+
+This plugin declares no settings.
+
+There is no plugin settings file: the manifest declares no `[settings]` keys
+and the entry point reads none. The trace filter is a command argument, not a
+setting.
+
+## Keybindings
+
+DevTools registers no default keybinding. Bind a read-only list command in
+`$XDG_CONFIG_HOME/bitty/init.lua`; user mappings keep precedence:
+
+```lua
+return {
+  keymaps = {
+    {
+      chord = "ctrl+alt+d",
+      action = "command:bitty-featured.devtools:plugins",
+      context = "global",
+    },
+  },
+}
+```
+
+The four list commands take no arguments, so they are safe to bind bare.
+`trace-start` accepts an optional `filter`; a bare binding traces all declared
+kinds.
+
+## Troubleshooting
+
+| Symptom / error         | Meaning                                                                               | What to do                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| No notification appears | The host queues notification bodies but does not drain them yet (bitty#1827).         | Read the command result through dispatch; it carries the full bounded text.       |
+| `E_BRIDGE_ABSENT`       | The host predates the `bitty.debug` backend, so `inspect` or `trace` is unavailable.  | Use a Bitty build that wires `bitty.debug`, or run the command on a host with it. |
+| `E_CAPABILITY_DENIED`   | `debug.inspect`, `debug.trace`, or `platform.notify` is missing, expired, or revoked. | Re-run `bitty plugin install <path>` and approve the current grant set.           |
+| `E_TRACE_ACTIVE`        | `trace-start` ran while this plugin already holds a trace.                            | Run `trace-dump` or `trace-stop` before starting another trace.                   |
+| `E_TRACE_GONE`          | The host dropped the trace on reload, failure, or disposal.                           | Start a new trace; the previous records are gone.                                 |
+| `E_DEF_INVALID`         | The `filter` argument is empty, not a string, or longer than 128 bytes.               | Pass a 1–128 byte exact kind or a prefix ending in `*`, such as `terminal.*`.     |
+| `E_DEF_LIMIT`           | The host trace limit for this plugin is reached.                                      | Stop an existing trace and retry.                                                 |
 
 ## Error handling
 
