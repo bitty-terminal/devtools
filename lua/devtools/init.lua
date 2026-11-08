@@ -33,7 +33,7 @@ local NOTIFY_TITLE = "Bitty DevTools"
 -- Mirrors the host's TRACE_FILTER_MAX_BYTES; the host re-validates.
 local TRACE_FILTER_MAX_BYTES = 128
 
-local session = trace.new(bitty.debug)
+local session = trace.new(bitty and bitty.debug)
 
 -- Return `bitty[namespace][name]` when it is callable, nil otherwise. Hosts
 -- predating the read-only debug backend (bitty#1573) have no `bitty.debug`,
@@ -111,8 +111,13 @@ local INSPECT_DESCRIPTIONS = {
 local EMPTY_ARGS_SCHEMA = { type = "object", properties = {}, additionalProperties = false }
 local RESULT_SCHEMA = { type = "string" }
 
+local register_command = bridge_fn("commands", "register")
+if register_command == nil then
+  return M
+end
+
 for _, target in ipairs(format.INSPECT_TARGETS) do
-  bitty.commands.register({
+  register_command({
     id = target,
     title = INSPECT_TITLES[target],
     description = INSPECT_DESCRIPTIONS[target],
@@ -138,7 +143,7 @@ local function filter_arg(args)
   return true, filter
 end
 
-bitty.commands.register({
+register_command({
   id = "trace-start",
   title = "DevTools: start event trace",
   description = "Start tracing the declared event kinds, optionally narrowed by a filter such as terminal.*.",
@@ -164,7 +169,7 @@ bitty.commands.register({
   end,
 })
 
-bitty.commands.register({
+register_command({
   id = "trace-dump",
   title = "DevTools: dump event trace",
   description = "Drain buffered trace records and summarize them, including the dropped count.",
@@ -181,7 +186,7 @@ bitty.commands.register({
   end,
 })
 
-bitty.commands.register({
+register_command({
   id = "trace-stop",
   title = "DevTools: stop event trace",
   description = "Drain the final trace records and close the trace.",

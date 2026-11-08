@@ -68,6 +68,9 @@ function M.truncate(text, limit)
   if type(text) ~= "string" then
     text = tostring(text)
   end
+  if limit <= 0 then
+    return ""
+  end
   if #text <= limit then
     return text
   end
@@ -328,6 +331,15 @@ end
 -- the host decodes each invalid byte to at most one replacement character,
 -- so `limit` bytes can never exceed `limit` characters.
 local function truncate_chars(text, limit)
+  if type(text) ~= "string" then
+    text = tostring(text)
+  end
+  if limit <= 0 then
+    return ""
+  end
+  if utf8 == nil or utf8.len == nil or utf8.offset == nil then
+    return M.truncate(text, limit)
+  end
   local ok, length = pcall(utf8.len, text)
   if not ok or length == nil then
     return M.truncate(text, limit)
@@ -335,9 +347,17 @@ local function truncate_chars(text, limit)
   if length <= limit then
     return text
   end
-  local cut = utf8.offset(text, limit - #M.ELLIPSIS + 1)
+  local keep = limit - #M.ELLIPSIS
+  if keep <= 0 then
+    return string.sub(M.ELLIPSIS, 1, limit)
+  end
+  local ok_off, cut = pcall(utf8.offset, text, keep + 1)
+  if not ok_off or cut == nil then
+    return M.truncate(text, limit)
+  end
   return string.sub(text, 1, cut - 1) .. M.ELLIPSIS
 end
+M.truncate_chars = truncate_chars
 
 -- One-line notification body derived from full command text: line breaks
 -- become NOTICE_SEPARATOR, control bytes are replaced, and the result is at

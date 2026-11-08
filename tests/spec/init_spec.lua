@@ -355,6 +355,24 @@ function M.run(context)
       tap.ok(call ~= "debug.control", "debug.control is never called")
     end
   end
+
+  -- loading without bitty or without bitty.commands does not raise (devtools#22)
+  local saved_bitty = _G.bitty
+  _G.bitty = nil
+  local nil_ok, nil_mod = pcall(function()
+    local chunk = assert(loadfile(root .. "/lua/devtools/init.lua"))
+    return chunk()
+  end)
+  tap.equal(nil_ok, true, "entry point loads when bitty is nil")
+  tap.equal(type(nil_mod), "table", "entry point returns module table when bitty is nil")
+  _G.bitty = { api_version = "1.0.0" }
+  local nocommands_ok, nocommands_mod = pcall(function()
+    local chunk = assert(loadfile(root .. "/lua/devtools/init.lua"))
+    return chunk()
+  end)
+  tap.equal(nocommands_ok, true, "entry point loads when bitty.commands is absent")
+  tap.equal(type(nocommands_mod), "table", "entry point returns module table when bitty.commands is absent")
+  _G.bitty = saved_bitty
 end
 
 return M

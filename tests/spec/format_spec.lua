@@ -22,6 +22,12 @@ function M.run(context)
   tap.ok(utf8.len(accented) ~= nil, "truncate never splits a UTF-8 sequence")
   tap.le(#accented, 8, "UTF-8 truncate stays within the limit")
   tap.equal(format.truncate("abcdef", 2), "..", "a limit below the ellipsis still respects the limit")
+  tap.equal(format.truncate("abcdef", 0), "", "truncate at zero limit returns empty string")
+  tap.equal(format.truncate("abcdef", -2), "", "truncate at negative limit returns empty string")
+  tap.equal(format.truncate_chars("abcdef", 3), "...", "truncate_chars at ellipsis length does not index backwards")
+  tap.equal(format.truncate_chars("abcdef", 2), "..", "truncate_chars below ellipsis length clamps to limit")
+  tap.equal(format.truncate_chars("abcdef", 0), "", "truncate_chars at zero limit returns empty string")
+  tap.equal(format.truncate_chars("abcdef", -1), "", "truncate_chars at negative limit returns empty string")
 
   -- field sanitizes control bytes
   tap.equal(format.field("a\nb\27[31m"), "a?b?[31m", "control bytes are replaced")
