@@ -18,7 +18,8 @@ CI; the individual suites are also available directly.
 ```sh
 just test            # lua5.4 runner + LuaLS check
 
-# Behavior tests: format bounds, trace state machine, commands, errors.
+# Behavior tests: format bounds, trace state machine, commands, live view,
+# errors.
 just test-lua
 
 # LuaLS conformance against the vendored definitions
@@ -28,18 +29,19 @@ just test-luals
 
 ## Layout
 
-| Path                            | Purpose                                                                                                                                                                                      |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `run.lua`                       | Plain-Lua runner; exits non-zero on assertion failure.                                                                                                                                       |
-| `support/tap.lua`               | Assertion helper (no external test framework).                                                                                                                                               |
-| `support/mock_host.lua`         | Fail-closed `bitty` stub: commands, notify, and `bitty.debug` with trace cap and declared-kind recording. Namespaces can be omitted (`omit_debug`, `omit_notify`) to simulate an older host. |
-| `spec/format_spec.lua`          | Rendering, truncation, sanitization, and bounds unit tests.                                                                                                                                  |
-| `spec/trace_spec.lua`           | Trace state machine unit tests (start/dump/stop, E_DEF_LIMIT, nil drain, retry).                                                                                                             |
-| `spec/init_spec.lua`            | Entry-point behavior against the mock host, including the no-UI assertion.                                                                                                                   |
-| `lua-defs/bitty.d.lua`          | Unmodified SDK LuaLS definitions (bitty-plugin-sdk `e1723b6`, sha256 `9aef9397...`).                                                                                                         |
-| `lua-defs/bitty-debug.d.lua`    | Local `bitty.debug` definitions mirroring bitty `c4af172b`, re-verified on `811ba94c`; `control` deliberately undefined.                                                                     |
-| `lua-defs/negative-fixture.lua` | Excluded-surface fixture that LuaLS must reject.                                                                                                                                             |
-| `check-luals.sh`                | POSIX shell positive/negative LuaLS workspace check.                                                                                                                                         |
+| Path                            | Purpose                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.lua`                       | Plain-Lua runner; exits non-zero on assertion failure.                                                                                                                                                                                                                                                                      |
+| `support/tap.lua`               | Assertion helper (no external test framework).                                                                                                                                                                                                                                                                              |
+| `support/mock_host.lua`         | Fail-closed `bitty` stub: commands, notify, `bitty.debug` with trace cap and declared-kind recording, `bitty.ui` with one-row bands and hidden empty rows, and a one-shot timer queue driven by `advance(ms)`. Namespaces can be omitted (`omit_debug`, `omit_notify`, `omit_ui`, `omit_timers`) to simulate an older host. |
+| `spec/format_spec.lua`          | Rendering, truncation, sanitization, bounds, and live-view row/status renderers.                                                                                                                                                                                                                                            |
+| `spec/trace_spec.lua`           | Trace state machine unit tests (start/dump/stop, E_DEF_LIMIT, nil drain, retry).                                                                                                                                                                                                                                            |
+| `spec/init_spec.lua`            | Entry-point behavior against the mock host, including the no-UI-at-activation assertion and the grant-less command surface.                                                                                                                                                                                                 |
+| `spec/view_spec.lua`            | Live view: mount/update/hide, cadence and floor, pause/resume without leaks, dropped-count visibility, command parity with the view open, grant degradation, loss handling, bridge-surface allowlist.                                                                                                                       |
+| `lua-defs/bitty.d.lua`          | Unmodified SDK LuaLS definitions (bitty-plugin-sdk `e1723b6`, sha256 `9aef9397...`).                                                                                                                                                                                                                                        |
+| `lua-defs/bitty-debug.d.lua`    | Local `bitty.debug` definitions mirroring bitty `c4af172b`, re-verified on `811ba94c`; `control` deliberately undefined.                                                                                                                                                                                                    |
+| `lua-defs/negative-fixture.lua` | Excluded-surface fixture that LuaLS must reject.                                                                                                                                                                                                                                                                            |
+| `check-luals.sh`                | POSIX shell positive/negative LuaLS workspace check.                                                                                                                                                                                                                                                                        |
 
 ## Known gaps
 

@@ -16,10 +16,10 @@ declared trace kinds, the live loop emits only `terminal.title-changed` and
 `focus.changed`; the other seven record only through test seams.
 Live-host evidence (CTX-0005): all seven commands dispatch with bounded text,
 nine delivered kinds all record, `terminal.*` filtering holds, and 12
-notifications queue. UI stays notification-only by scope; the upstream
-overlay APIs have landed (CTX-0911 bitty#1594 / issue #1570; CTX-0941
-bitty#1654 / #1633). bitty#1442 (session-restore input history, closed) is
-not a GUI blocker. Plugin-side follow-through for devtools#10 items 2-5:
+notifications queue. Since `0.2.0` the plugin also ships an optional docked
+live view: non-focusable, `ui.rich` only, no input capture. The seven
+read-only commands stay notification-only. Plugin-side follow-through for
+devtools#10 items 2-5:
 host work is tracked in bitty#1827 (notification drain), bitty#1828
 (remaining trace kinds), and bitty#1829 (palette/keybinding invocation);
 registry onboarding in bitty-plugins#80 and the palette consumer test in
@@ -27,6 +27,23 @@ palette#31.
 
 ### Added
 
+- Optional docked live view (`view-open`, `view-close`, `view-pause`,
+  `view-resume`): a status line, an inspect table, and a rolling trace stream
+  rendered as eight one-row blocks in the window's `bottom` band. Built only
+  from shipped Plugin API v1 spellings — `bitty.ui.mount` / `bitty.ui.update`,
+  `bitty.timers.create` / `bitty.timers.cancel`, and the read-only
+  `bitty.debug` backend. Refreshed by a one-shot timer chain (1 s default,
+  clamped to 500–10000 ms) that updates only the rows whose text changed, so
+  an idle tick issues no update and no tick ever notifies. Pause cancels the
+  timer but keeps the view's trace handle, so records keep accumulating in
+  the bounded host buffer and resume drains the backlog; the dropped counter
+  stays visible. The view owns its own trace handle, so the seven read-only
+  commands behave byte-identically with the view open or closed. Design
+  record and host evidence: `docs/design/live-view.md`. Two Core gaps found
+  and filed instead of worked around: no `bitty.ui.unmount`
+  ([bitty#3106](https://github.com/bitty-terminal/bitty/issues/3106)) and no
+  mounted-block visibility/focus signal
+  ([bitty#3107](https://github.com/bitty-terminal/bitty/issues/3107)).
 - Fail-closed absent-bridge handling: every `bitty.debug` / `bitty.notify`
   function resolves through a presence guard. A missing namespace or
   function (a host predating the read-only debug backend) returns an
@@ -70,6 +87,13 @@ palette#31.
 
 ### Changed
 
+- The manifest now requests `ui.rich` for the optional live view (version
+  `0.2.0`). This is a **permission change**: an existing install must approve
+  the new grant set on upgrade. The seven read-only commands never touch
+  `bitty.ui` or `bitty.timers`, so they keep working grant-less; only the
+  four `view-*` commands degrade, to a typed error on the notification path.
+  `ui.overlay`, `ui.overlay.focus`, and every input-capture identifier stay
+  absent — the view is non-focusable and never captures input.
 - `compat.bitty` is minimum-only (`>=0.0.21`): the floor is unchanged, and no
   ceiling is declared, so a newer host is admitted rather than failed closed
   before the plugin can run.

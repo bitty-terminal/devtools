@@ -149,13 +149,13 @@ local ROW_RENDERERS = {
 -- (E_NOT_IMPLEMENTED) and deliberately absent.
 M.INSPECT_TARGETS = { "plugins", "commands", "events", "grants" }
 
--- Plain-text summary of a `bitty.debug.inspect` result.
--- Returns `title, body`. O(min(n, MAX_LINES)) rendering for n items.
-function M.inspect(target, result)
+-- Body lines of a `bitty.debug.inspect` summary: a count header, one line per
+-- rendered item (at most MAX_LINES), an optional "(+N more)" marker, and
+-- "(none)" for an empty list. Returns an array of already-bounded lines.
+local function inspect_body_lines(target, result)
   local render = ROW_RENDERERS[target]
-  local title = "DevTools: " .. M.field(target)
   if render == nil or type(result) ~= "table" or type(result.items) ~= "table" then
-    return title, "unexpected inspect result shape"
+    return { "unexpected inspect result shape" }
   end
   local items = result.items
   local count = #items
@@ -181,7 +181,26 @@ function M.inspect(target, result)
   if count == 0 then
     lines[#lines + 1] = "(none)"
   end
-  return title, join_bounded(lines)
+  return lines
+end
+
+-- Plain-text summary of a `bitty.debug.inspect` result.
+-- Returns `title, body`. O(min(n, MAX_LINES)) rendering for n items.
+function M.inspect(target, result)
+  local title = "DevTools: " .. M.field(target)
+  return title, join_bounded(inspect_body_lines(target, result))
+end
+
+-- The first `max_lines` body lines of an inspect summary, for a one-row-per-
+-- line live view. Returns an array; a partial table is intentional there.
+function M.inspect_lines(target, result, max_lines)
+  local body = inspect_body_lines(target, result)
+  local limit = math.min(#body, math.max(max_lines or 0, 0))
+  local lines = {}
+  for index = 1, limit do
+    lines[index] = body[index]
+  end
+  return lines
 end
 
 local function sorted_keys(payload)
@@ -224,6 +243,28 @@ function M.payload(payload)
   return table.concat(parts, " ")
 end
 
+-- Render one drained trace record as a bounded line. `base` is the first
+-- record's timestamp, so offsets are relative to the drain window.
+local function record_line(record, base)
+  if type(record) ~= "table" then
+    return "?"
+  end
+  local offset = "?"
+  if base ~= nil and is_integer(record.timestamp) then
+    offset = string.format("+%dms", record.timestamp - base)
+  end
+  return M.truncate(
+    string.format(
+      "#%s %s %s %s",
+      M.field(record.sequence),
+      offset,
+      M.field(record.topic),
+      M.payload(record.payload)
+    ),
+    M.MAX_LINE_BYTES
+  )
+end
+
 -- Plain-text summary of a drained `bitty.debug.trace_get` result. Shows the
 -- most recent MAX_LINES records with timestamps relative to the first
 -- drained record, plus per-drain record and dropped counts.
@@ -256,26 +297,59 @@ function M.trace(result, filter)
     lines[#lines + 1] = string.format("(%d earlier records omitted)", start - 1)
   end
   for index = start, count do
-    local record = records[index]
-    local line
-    if type(record) ~= "table" then
-      line = "?"
-    else
-      local offset = "?"
-      if base ~= nil and is_integer(record.timestamp) then
-        offset = string.format("+%dms", record.timestamp - base)
-      end
-      line = string.format(
-        "#%s %s %s %s",
-        M.field(record.sequence),
-        offset,
-        M.field(record.topic),
-        M.payload(record.payload)
-      )
-    end
-    lines[#lines + 1] = M.truncate(line, M.MAX_LINE_BYTES)
+    lines[#lines + 1] = record_line(records[index], base)
   end
   return title, join_bounded(lines)
+end
+
+-- The newest `max_lines` record lines of a drained trace result, oldest
+-- first, for a one-row-per-line live view. Returns an empty array when the
+-- drain carried no records or the shape is unexpected.
+function M.trace_lines(result, max_lines)
+  local lines = {}
+  if type(result) ~= "table" or type(result.records) ~= "table" then
+    return lines
+  end
+  local records = result.records
+  local count = #records
+  local limit = math.max(max_lines or 0, 0)
+  if count == 0 or limit == 0 then
+    return lines
+  end
+  local base = nil
+  local first = records[1]
+  if type(first) == "table" and is_integer(first.timestamp) then
+    base = first.timestamp
+  end
+  local start = math.max(1, count - limit + 1)
+  for index = start, count do
+    lines[#lines + 1] = record_line(records[index], base)
+  end
+  return lines
+end
+
+-- One status line for the live view: mode, target, cadence, and the loss
+-- accounting the trace backend exists to expose. `state` is a plain table
+-- (`status`, `target`, `interval_ms`, `records`, `dropped`, `errors`).
+function M.view_header(state)
+  if type(state) ~= "table" then
+    state = {}
+  end
+  local status = state.status
+  if status ~= "paused" and status ~= "lost" then
+    status = "live"
+  end
+  local interval = is_integer(state.interval_ms) and state.interval_ms or 0
+  local text = string.format(
+    "DEVTOOLS %s %s %.1fs | rec %d drop %d err %d",
+    status,
+    M.field(state.target),
+    interval / 1000,
+    is_integer(state.records) and state.records or 0,
+    is_integer(state.dropped) and state.dropped or 0,
+    is_integer(state.errors) and state.errors or 0
+  )
+  return M.truncate(sanitize(text), M.MAX_LINE_BYTES)
 end
 
 -- Normalize any caught error into `{ code, message }`. Host bridge errors
@@ -296,6 +370,12 @@ local ERROR_HINTS = {
   E_DEF_LIMIT = "trace limit reached for this plugin",
   E_DEF_INVALID = "invalid request",
   E_TIMEOUT = "host call timed out",
+  E_UI_UNAVAILABLE = "host cannot present this UI slot",
+  E_UI_COMPONENT_INVALID = "UI component rejected",
+  E_UI_BLOCK_BUDGET = "UI block budget exhausted",
+  E_BUDGET_TIMER = "timer budget exhausted",
+  E_VIEW_ACTIVE = "the live view is already open",
+  E_VIEW_INACTIVE = "the live view is not open",
 }
 
 -- `<code>: <hint (message)>` for a caught error, unbounded by itself.

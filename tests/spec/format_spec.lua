@@ -166,6 +166,65 @@ function M.run(context)
   tap.equal(format.error_detail({ code = "E_TIMEOUT" }), "E_TIMEOUT: host call timed out", "error detail")
   tap.le(#format.error_detail({ code = "E_X", message = string.rep("q", 900) }), format.MAX_ERROR_BYTES,
     "error detail is bounded")
+
+  -- live-view row renderers
+  local lines = format.inspect_lines("plugins", {
+    items = {
+      { id = "bitty-featured.devtools", version = "0.2.0", state = "active", generation = 1 },
+      { id = "bitty-featured.activity", version = "0.0.1", state = "suspended", generation = 3 },
+      { id = "third", version = "1", state = "active", generation = 1 },
+    },
+  }, 2)
+  tap.equal(#lines, 2, "inspect_lines honours the row budget")
+  tap.equal(lines[1], "3 plugins", "inspect_lines starts with the count header")
+  tap.contains(lines[2], "bitty-featured.devtools 0.2.0 [active] gen 1", "inspect_lines renders a table row")
+  local empty_lines = format.inspect_lines("grants", { items = {} }, 3)
+  tap.equal(empty_lines[2], "(none)", "inspect_lines keeps the empty marker")
+  tap.equal(#format.inspect_lines("plugins", "bogus", 3), 1, "a bad shape renders one marker line")
+
+  local drained = {
+    records = {
+      { sequence = 1, timestamp = 100, topic = "terminal.opened", payload = { terminal_id = 1 } },
+      { sequence = 2, timestamp = 145, topic = "process.exited", payload = { exit_code = 0 } },
+      { sequence = 3, timestamp = 160, topic = "terminal.bell", payload = {} },
+    },
+    dropped = 2,
+  }
+  local trace_rows = format.trace_lines(drained, 2)
+  tap.equal(#trace_rows, 2, "trace_lines honours the row budget")
+  tap.contains(trace_rows[1], "+45ms process.exited", "trace_lines keeps relative timestamps")
+  tap.contains(trace_rows[2], "terminal.bell", "trace_lines returns the newest records")
+  tap.equal(#format.trace_lines({ records = {} }, 4), 0, "trace_lines is empty for an empty drain")
+  tap.equal(#format.trace_lines("bogus", 4), 0, "trace_lines tolerates a bad shape")
+  for _, line in ipairs(trace_rows) do
+    tap.le(#line, format.MAX_LINE_BYTES, "a trace row stays within the line bound")
+  end
+
+  local header = format.view_header({
+    status = "live",
+    target = "plugins",
+    interval_ms = 1000,
+    records = 12,
+    dropped = 3,
+    errors = 1,
+  })
+  tap.equal(header, "DEVTOOLS live plugins 1.0s | rec 12 drop 3 err 1", "view_header renders the status line")
+  tap.contains(
+    format.view_header({ status = "paused", target = "events", interval_ms = 500, records = 0, dropped = 0, errors = 0 }),
+    "DEVTOOLS paused events 0.5s",
+    "view_header reports the paused mode and cadence"
+  )
+  tap.contains(
+    format.view_header({ status = "unknown", target = "grants" }),
+    "DEVTOOLS live grants",
+    "an unknown status falls back to live"
+  )
+  tap.le(#format.view_header({ target = string.rep("t", 300) }), format.MAX_LINE_BYTES, "view_header is bounded")
+  tap.not_contains(
+    format.view_header({ target = "a\nb\27[31m" }),
+    "\n",
+    "view_header carries no control bytes"
+  )
 end
 
 return M

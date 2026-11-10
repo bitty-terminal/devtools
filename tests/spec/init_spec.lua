@@ -16,6 +16,10 @@ local COMMAND_IDS = {
   "trace-start",
   "trace-stop",
   "trace-dump",
+  "view-open",
+  "view-close",
+  "view-pause",
+  "view-resume",
 }
 
 local EVENTS = {
@@ -89,6 +93,7 @@ function M.run(context)
     _G.bitty = host.bitty
     package.loaded["devtools.format"] = nil
     package.loaded["devtools.trace"] = nil
+    package.loaded["devtools.view"] = nil
     local chunk = assert(loadfile(root .. "/lua/devtools/init.lua"))
     return chunk()
   end
