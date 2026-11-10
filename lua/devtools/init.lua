@@ -4,18 +4,21 @@
 -- resource created here (commands, the trace handle) for the lifetime of
 -- that generation. Registration calls are valid only while init.lua runs.
 --
--- Surface: Plugin API v1 (`bitty.commands`, `bitty.notify`) plus the
--- read-only `bitty.debug` namespace (`inspect`, `trace`, `trace_get`).
--- `bitty.debug.control` is never called, and no `bitty.ui` surface is used:
--- UI stays notification-only by scope; the upstream overlay APIs have landed
--- (CTX-0911, CTX-0941), and bitty#1442 is not a GUI blocker.
+-- Surface: Plugin API v1 (`bitty.commands`, `bitty.notify`, `bitty.ui.mount` /
+-- `bitty.ui.update`, `bitty.timers.create` / `cancel`) plus the read-only
+-- `bitty.debug` namespace (`inspect`, `trace`, `trace_get`).
+-- `bitty.debug.control` is never called, and `bitty.ui.overlay.*` is never
+-- used: the optional live view is a non-focusable bottom band that never
+-- captures input.
 --
 -- Capabilities used here must match `bitty-plugin.toml`: `debug.inspect`,
--- `debug.trace`, and `platform.notify`. Every host call is wrapped in pcall;
--- a failure is surfaced as a concise notification carrying the host error
--- code and never escapes a command handler. A missing bridge namespace or
--- function (older host, revoked grant) degrades to an `E_BRIDGE_ABSENT`
--- error result through the same path, never a raise.
+-- `debug.trace`, `platform.notify`, and `ui.rich` (the live view only). Every
+-- host call is wrapped in pcall; a failure is surfaced as a concise
+-- notification carrying the host error code and never escapes a command
+-- handler. A missing bridge namespace or function (older host, revoked
+-- grant) degrades to an `E_BRIDGE_ABSENT` error result through the same path,
+-- never a raise. The seven read-only commands never touch `bitty.ui` or
+-- `bitty.timers`, so they keep working grant-less when `ui.rich` is declined.
 --
 -- `args_schema` / `result_schema` document the intended contract only: the
 -- current host bridge keeps `id`, `title`, `description`, and `run` and does
@@ -26,14 +29,19 @@
 
 local format = require("devtools.format")
 local trace = require("devtools.trace")
+local view = require("devtools.view")
 
 local M = {}
 
 local NOTIFY_TITLE = "Bitty DevTools"
+local VIEW_TITLE = "DevTools: view"
 -- Mirrors the host's TRACE_FILTER_MAX_BYTES; the host re-validates.
 local TRACE_FILTER_MAX_BYTES = 128
 
 local session = trace.new(bitty and bitty.debug)
+-- One live view per plugin generation. The object survives close/reopen so
+-- its mounted block handles are reused (Plugin API v1 has no ui.unmount).
+local live = nil
 
 -- Return `bitty[namespace][name]` when it is callable, nil otherwise. Hosts
 -- predating the read-only debug backend (bitty#1573) have no `bitty.debug`,
@@ -206,6 +214,148 @@ register_command({
     end
     local title, body = format.trace(outcome.result, filter)
     return show(title, "trace stopped; " .. body)
+  end,
+})
+
+-- Live view commands. The view is optional: it needs `ui.rich`, `bitty.ui`,
+-- and `bitty.timers`, and every command above still works without them. A
+-- declined/absent grant surfaces as a typed error result through the same
+-- notification path the other commands use — never a raise, never a silent
+-- no-op.
+local function view_state_text(state)
+  return string.format(
+    "%d records, %d dropped, %d errors",
+    state.records,
+    state.dropped,
+    state.errors
+  )
+end
+
+local function ensure_view()
+  if live == nil then
+    live = view.new(bitty, {
+      on_lost = function(reason)
+        -- One notification per loss, never per tick: the tick path is silent
+        -- by design so the refresh budget never touches the notify policy.
+        show(VIEW_TITLE, "view closed: " .. format.field(reason), "normal")
+      end,
+    })
+  end
+  return live
+end
+
+register_command({
+  id = "view-open",
+  title = "DevTools: open the live view",
+  description = "Mount a docked live view (status line, inspect table, trace stream) refreshed on a timer.",
+  args_schema = {
+    type = "object",
+    properties = {
+      target = { type = "string", enum = format.INSPECT_TARGETS },
+      filter = { type = "string", minLength = 1, maxLength = TRACE_FILTER_MAX_BYTES },
+      interval_ms = { type = "integer" },
+    },
+    additionalProperties = false,
+  },
+  result_schema = RESULT_SCHEMA,
+  run = function(args)
+    local valid, filter = filter_arg(args)
+    if not valid then
+      return show_error("view open", filter)
+    end
+    local target = view.DEFAULT_TARGET
+    if type(args) == "table" and args.target ~= nil then
+      if not view.is_target(args.target) then
+        return show_error("view open", {
+          code = "E_DEF_INVALID",
+          message = "target must be one of plugins, commands, events, grants",
+        })
+      end
+      target = args.target
+    end
+    local interval = nil
+    if type(args) == "table" and args.interval_ms ~= nil then
+      local value = args.interval_ms
+      if type(value) ~= "number" or value ~= math.floor(value) then
+        return show_error("view open", {
+          code = "E_DEF_INVALID",
+          message = "interval_ms must be an integer",
+        })
+      end
+      interval = value
+    end
+    local ok, result = ensure_view():open({ target = target, filter = filter, interval_ms = interval })
+    if not ok then
+      return show_error("view open", result)
+    end
+    local scope = filter and ("filter " .. format.field(filter)) or "all declared kinds"
+    return show(
+      VIEW_TITLE,
+      string.format(
+        "view open (%s, %s, %.1fs, %d rows)",
+        result.target,
+        scope,
+        result.interval_ms / 1000,
+        view.ROW_COUNT
+      )
+    )
+  end,
+})
+
+register_command({
+  id = "view-close",
+  title = "DevTools: close the live view",
+  description = "Hide the live view, cancel its timer, and release its trace handle.",
+  args_schema = EMPTY_ARGS_SCHEMA,
+  result_schema = RESULT_SCHEMA,
+  run = function(_args)
+    if live == nil then
+      return show_error("view close", { code = view.E_VIEW_INACTIVE, message = "no live view is open" })
+    end
+    local ok, result = live:close()
+    if not ok then
+      return show_error("view close", result)
+    end
+    return show(VIEW_TITLE, "view closed; " .. view_state_text(result))
+  end,
+})
+
+register_command({
+  id = "view-pause",
+  title = "DevTools: pause the live view",
+  description = "Freeze the live view and cancel its timer; the trace keeps recording until resume.",
+  args_schema = EMPTY_ARGS_SCHEMA,
+  result_schema = RESULT_SCHEMA,
+  run = function(_args)
+    if live == nil then
+      return show_error("view pause", { code = view.E_VIEW_INACTIVE, message = "no live view is open" })
+    end
+    local ok, result = live:pause()
+    if not ok then
+      return show_error("view pause", result)
+    end
+    return show(
+      VIEW_TITLE,
+      "view paused (" .. view_state_text(result) .. "); the trace keeps recording, resume drains it"
+    )
+  end,
+})
+
+register_command({
+  id = "view-resume",
+  title = "DevTools: resume the live view",
+  description = "Drain the records buffered while paused and restart the refresh timer.",
+  args_schema = EMPTY_ARGS_SCHEMA,
+  result_schema = RESULT_SCHEMA,
+  run = function(_args)
+    if live == nil then
+      return show_error("view resume", { code = view.E_VIEW_INACTIVE, message = "no live view is open" })
+    end
+    local ok, result = live:resume()
+    if not ok then
+      return show_error("view resume", result)
+    end
+    return show(VIEW_TITLE, "view resumed; " .. view_state_text(result))
   end,
 })
 

@@ -12,7 +12,7 @@
 [plugin]
 id = "bitty-featured.devtools"
 name = "Bitty DevTools"
-version = "0.1.0"
+version = "0.2.0"
 description = "Read-only inspection and event tracing of the Bitty plugin runtime."
 license = "MIT"
 
@@ -34,13 +34,22 @@ plugin-api = "^1.0"
 #   command and event registrations, and this plugin's own grants).
 # - `debug.trace`: bounded `bitty.debug.trace` / `trace_get` event traces.
 # - `platform.notify`: show the bounded text summaries.
+# - `ui.rich`: mount the optional live view (declarative `Text` rows into the
+#   `bottom` band through `bitty.ui.mount` / `update`). This is the only UI
+#   grant the plugin requests: the view is non-focusable, so `ui.overlay`,
+#   `ui.overlay.focus`, and every input-capture spelling stay absent.
 #
-# `debug.control` (high-risk runtime control) and every `ui.*` identifier are
-# intentionally absent: this plugin never mutates runtime state, and UI stays
-# notification-only by scope (upstream overlay APIs: CTX-0911, CTX-0941).
+# `debug.control` (high-risk runtime control) stays absent: this plugin never
+# mutates runtime state.
+#
+# Adding `ui.rich` is a re-consent event for existing users. The seven
+# read-only commands never touch `bitty.ui` or `bitty.timers`, so they keep
+# working when the grant is declined or the host is too old; only the four
+# `view-*` commands degrade, to a typed error result on the notification path.
 debug.inspect = true
 debug.trace = true
 platform.notify = true
+ui.rich = true
 
 [lazy]
 # Static triggers let the host register the plugin without creating a VM.
@@ -53,6 +62,10 @@ commands = [
   "bitty-featured.devtools:trace-start",
   "bitty-featured.devtools:trace-stop",
   "bitty-featured.devtools:trace-dump",
+  "bitty-featured.devtools:view-open",
+  "bitty-featured.devtools:view-close",
+  "bitty-featured.devtools:view-pause",
+  "bitty-featured.devtools:view-resume",
 ]
 # A `bitty.debug.trace` trace records ONLY the event kinds declared here (the
 # same least-privilege precondition `bitty.events.subscribe` enforces), and
