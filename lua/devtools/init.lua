@@ -244,21 +244,19 @@ local function ensure_view()
   return live
 end
 
-register_command({
-  id = "view-open",
-  title = "DevTools: open the live view",
-  description = "Mount a docked live view (status line, inspect table, trace stream) refreshed on a timer.",
-  args_schema = {
-    type = "object",
-    properties = {
-      target = { type = "string", enum = format.INSPECT_TARGETS },
-      filter = { type = "string", minLength = 1, maxLength = TRACE_FILTER_MAX_BYTES },
-      interval_ms = { type = "integer" },
-    },
-    additionalProperties = false,
+local VIEW_OPEN_ARGS_SCHEMA = {
+  type = "object",
+  properties = {
+    target = { type = "string", enum = format.INSPECT_TARGETS },
+    filter = { type = "string", minLength = 1, maxLength = TRACE_FILTER_MAX_BYTES },
+    interval_ms = { type = "integer" },
   },
-  result_schema = RESULT_SCHEMA,
-  run = function(args)
+  additionalProperties = false,
+}
+
+-- Shared command bodies. `view-open`, `view-close`, and `view-toggle` run the
+-- same code, so a toggle can never diverge from the explicit halves.
+local function open_view(args)
     local valid, filter = filter_arg(args)
     if not valid then
       return show_error("view open", filter)
@@ -288,6 +286,14 @@ register_command({
     if not ok then
       return show_error("view open", result)
     end
+    -- `open` returns `true, snapshot`; the guard is explicit so the field
+    -- reads below never depend on the boolean flag narrowing `result`.
+    if result == nil then
+      return show_error("view open", {
+        code = view.E_VIEW_INACTIVE,
+        message = "the view reported no state after opening",
+      })
+    end
     local scope = filter and ("filter " .. format.field(filter)) or "all declared kinds"
     return show(
       VIEW_TITLE,
@@ -299,6 +305,27 @@ register_command({
         view.ROW_COUNT
       )
     )
+end
+
+local function close_view()
+  if live == nil then
+    return show_error("view close", { code = view.E_VIEW_INACTIVE, message = "no live view is open" })
+  end
+  local ok, result = live:close()
+  if not ok then
+    return show_error("view close", result)
+  end
+  return show(VIEW_TITLE, "view closed; " .. view_state_text(result))
+end
+
+register_command({
+  id = "view-open",
+  title = "DevTools: open the live view",
+  description = "Mount a docked live view (status line, inspect table, trace stream) refreshed on a timer.",
+  args_schema = VIEW_OPEN_ARGS_SCHEMA,
+  result_schema = RESULT_SCHEMA,
+  run = function(args)
+    return open_view(args)
   end,
 })
 
@@ -309,14 +336,24 @@ register_command({
   args_schema = EMPTY_ARGS_SCHEMA,
   result_schema = RESULT_SCHEMA,
   run = function(_args)
-    if live == nil then
-      return show_error("view close", { code = view.E_VIEW_INACTIVE, message = "no live view is open" })
+    return close_view()
+  end,
+})
+
+-- One chord, one state flip: the plugin had no toggle, so a key bound to
+-- `view-open` could only ever open (a second press failed with
+-- `E_VIEW_ACTIVE`) and leaving the band required a second binding.
+register_command({
+  id = "view-toggle",
+  title = "DevTools: toggle the live view",
+  description = "Open the live view when it is closed, otherwise close it.",
+  args_schema = VIEW_OPEN_ARGS_SCHEMA,
+  result_schema = RESULT_SCHEMA,
+  run = function(args)
+    if live ~= nil and live.opened then
+      return close_view()
     end
-    local ok, result = live:close()
-    if not ok then
-      return show_error("view close", result)
-    end
-    return show(VIEW_TITLE, "view closed; " .. view_state_text(result))
+    return open_view(args)
   end,
 })
 

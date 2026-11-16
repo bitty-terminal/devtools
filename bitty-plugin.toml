@@ -12,7 +12,7 @@
 [plugin]
 id = "bitty-featured.devtools"
 name = "Bitty DevTools"
-version = "0.2.0"
+version = "0.2.1"
 description = "Read-only inspection and event tracing of the Bitty plugin runtime."
 license = "MIT"
 
@@ -64,6 +64,7 @@ commands = [
   "bitty-featured.devtools:trace-dump",
   "bitty-featured.devtools:view-open",
   "bitty-featured.devtools:view-close",
+  "bitty-featured.devtools:view-toggle",
   "bitty-featured.devtools:view-pause",
   "bitty-featured.devtools:view-resume",
 ]

@@ -68,6 +68,9 @@ Sharing rules:
    `E_TRACE_ACTIVE`.
 2. `view-open` / `view-close` only ever touch the view handle. `view-close`
    never closes the command trace, and `trace-stop` never closes the view.
+   `view-toggle` runs exactly one of those two bodies (open when the view is
+   closed, close when it is open) and returns the same text, so a single bound
+   chord can never leave the band in a state the explicit halves cannot reach.
 3. Draining is per handle. The view drains its own buffer once per tick; the
    command dump drains the command buffer. Neither consumes the other's
    records.
