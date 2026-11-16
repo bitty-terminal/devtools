@@ -27,6 +27,13 @@ palette#31.
 
 ### Added
 
+- `view-toggle` command: one chord now opens and closes the docked live view.
+  The plugin previously had no toggle, so a keymap bound to `view-open` could
+  only open — a second press failed with `E_VIEW_ACTIVE` and hiding the band
+  needed a second binding for `view-close`. The toggle dispatches to the same
+  open/close bodies and reports the identical text, so both halves and the
+  toggle stay in lockstep. `tests/spec/view_spec.lua` pins the alternation,
+  the result-text parity, argument forwarding, and closing a paused view.
 - Optional docked live view (`view-open`, `view-close`, `view-pause`,
   `view-resume`): a status line, an inspect table, and a rolling trace stream
   rendered as eight one-row blocks in the window's `bottom` band. Built only

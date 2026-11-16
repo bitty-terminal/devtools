@@ -18,6 +18,7 @@ local COMMAND_IDS = {
   "trace-dump",
   "view-open",
   "view-close",
+  "view-toggle",
   "view-pause",
   "view-resume",
 }

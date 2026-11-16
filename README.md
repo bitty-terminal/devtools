@@ -24,7 +24,7 @@ optionally in a docked live view refreshed on a timer.
 > bytes / 0 rows, `grants` 50 bytes / 3 grants, `trace-start` / `trace-dump`
 > 9 records / `trace-stop` close cleanly, `terminal.*` filter keeps
 > `terminal.bell` and drops `focus.changed`, 12 notifications queued). The
-> plugin is also verified against the local mock host (1132 assertions,
+> plugin is also verified against the local mock host (1159 assertions,
 > including the live view) and LuaLS definitions. Since `0.2.0` the plugin
 > also ships an optional docked live view built from `bitty.ui.mount` /
 > `update` and `bitty.timers`; it is non-focusable, never captures input, and
@@ -63,7 +63,7 @@ bitty plugin list
 `bitty plugin install <path>` stages the package under the XDG data store and
 records the capabilities you consent to; it executes no plugin code (`--yes`
 approves non-interactively). Verify activation with `bitty plugin list`: the
-entry must show `bitty-featured.devtools`, version `0.2.0`, source
+entry must show `bitty-featured.devtools`, version `0.2.1`, source
 `local-path`, enabled, and the four grants. `bitty plugin info
 bitty-featured.devtools` prints the recorded grant set.
 
@@ -84,6 +84,7 @@ one-line notice of it, at most 256 characters, as a notification.
 | `bitty-featured.devtools:trace-stop`  | Drain the final records and close the trace. If the final drain fails, the trace is still closed and the drain error is reported.                                                           |
 | `bitty-featured.devtools:view-open`   | Mount the live view. Optional `target` (`plugins` \| `commands` \| `events` \| `grants`), optional `filter` (same grammar as `trace-start`), optional `interval_ms` (clamped to 500–10000). |
 | `bitty-featured.devtools:view-close`  | Hide the live view, cancel its timer, and release its own trace handle. Reports the record, dropped, and error counts.                                                                      |
+| `bitty-featured.devtools:view-toggle` | Open the live view when it is closed, otherwise close it. Takes the same optional arguments as `view-open`; the result is the same text the matching half reports.                          |
 | `bitty-featured.devtools:view-pause`  | Freeze the live view and cancel its timer. The trace keeps recording in the bounded host buffer until resume.                                                                               |
 | `bitty-featured.devtools:view-resume` | Drain the records buffered while paused and restart the refresh timer.                                                                                                                      |
 
@@ -132,6 +133,9 @@ Behavior:
   view's trace handle: records keep accumulating in the host's bounded
   drop-oldest buffer, and `view-resume` drains them in one tick. The dropped
   counter therefore keeps its meaning instead of resetting.
+- **Toggle.** `view-toggle` dispatches to the same open/close path, so the
+  band is reachable and dismissible from one chord; `view-open` while a view
+  is open still fails `E_VIEW_ACTIVE`, which the toggle never hits.
 - **Close.** `view-close` hides every row (an empty band root reserves no
   row), cancels the timer, and releases the view's trace handle. Plugin API
   v1 has no `ui.unmount`, so the eight blocks stay allocated for the
@@ -177,9 +181,11 @@ return {
 
 The four list commands take no arguments, so they are safe to bind bare.
 `trace-start` accepts an optional `filter`; a bare binding traces all declared
-kinds. The `view-*` commands take no arguments except `view-open`, so
-`view-open` (or a toggle between `view-open` / `view-close`) also binds
-bare.
+kinds. `view-toggle` is the command to bind to a single chord: it opens when the view
+is closed and closes when it is open, so one key both shows and hides the band.
+`view-open` / `view-close` remain available when a caller needs the explicit
+half, and both report exactly the text the toggle reports for the same action.
+`view-pause` / `view-resume` take no arguments.
 
 ## Troubleshooting
 

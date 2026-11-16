@@ -27,6 +27,7 @@ local COMMAND_IDS = {
   "trace-dump",
   "view-open",
   "view-close",
+  "view-toggle",
   "view-pause",
   "view-resume",
 }
@@ -189,6 +190,47 @@ function M.run(context)
   tap.equal(mounted:block_count(), view.ROW_COUNT, "open/close cycles never mount extra blocks")
   tap.equal(mounted:timer_count(), 0, "no timer survives the last close")
   tap.equal(mounted:open_trace_count(), 0, "no trace survives the last close")
+
+  -- toggle: one command, one state flip, the same results as the halves ------
+
+  local explicit = new_host()
+  load_plugin(explicit)
+  explicit:run("view-open")
+  local explicit_close = explicit:run("view-close")
+
+  local toggled = new_host()
+  load_plugin(toggled)
+  tap.contains(
+    toggled:run("view-toggle"),
+    "view open (plugins, all declared kinds, 1.0s, 8 rows)",
+    "toggle opens the view when none is open"
+  )
+  tap.equal(toggled:timer_count(), 1, "toggle-open arms the refresh timer")
+  tap.equal(toggled:open_trace_count(), 1, "toggle-open owns one view trace")
+  local toggle_close = toggled:run("view-toggle")
+  tap.contains(toggle_close, "view closed;", "toggle closes the view when it is open")
+  tap.equal(toggle_close, explicit_close, "toggle-close reports the same text as view-close")
+  tap.equal(#toggled:bands("bottom"), 0, "toggle-close leaves no visible band row")
+  tap.equal(toggled:timer_count(), 0, "toggle-close cancels the refresh timer")
+  tap.equal(toggled:open_trace_count(), 0, "toggle-close releases the view trace")
+  tap.contains(toggled:run("view-toggle", { interval_ms = 2000 }), "2.0s", "toggle forwards open arguments")
+  toggled:run("view-toggle")
+  for _ = 1, 3 do
+    tap.contains(toggled:run("view-toggle"), "view open", "toggle reopens after a close")
+    tap.contains(toggled:run("view-toggle"), "view closed", "toggle closes again")
+  end
+  tap.equal(toggled:block_count(), view.ROW_COUNT, "toggle cycles never mount extra blocks")
+  tap.equal(toggled:timer_count(), 0, "toggle leaves no timer armed after closing")
+  tap.equal(toggled:open_trace_count(), 0, "toggle leaves no trace open after closing")
+
+  -- a paused view still closes through the toggle (the trace keeps recording)
+  local paused_toggle = new_host()
+  load_plugin(paused_toggle)
+  paused_toggle:run("view-open")
+  paused_toggle:run("view-pause")
+  tap.contains(paused_toggle:run("view-toggle"), "view closed;", "toggle closes a paused view")
+  tap.equal(paused_toggle:timer_count(), 0, "closing a paused view leaves no timer")
+  tap.equal(paused_toggle:open_trace_count(), 0, "closing a paused view releases the trace")
 
   -- refresh budget ----------------------------------------------------------
 
